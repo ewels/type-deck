@@ -45,14 +45,18 @@ The version lives in `com.ewels.type-deck.sdPlugin/manifest.json` as a four-part
 To cut a release:
 
 ```sh
-# 1. Bump manifest "Version" to "X.Y.Z.0" on a clean tree, then push.
-git commit -m "Bump version to X.Y.Z" com.ewels.type-deck.sdPlugin/manifest.json
+# 1. Move the CHANGELOG.md "Unreleased" entries under a new "## [X.Y.Z] - YYYY-MM-DD"
+#    heading, add the compare link at the bottom, and bump manifest "Version" to
+#    "X.Y.Z.0" on a clean tree, then push.
+git commit -m "Bump version to X.Y.Z" CHANGELOG.md com.ewels.type-deck.sdPlugin/manifest.json
 git push origin main
 # 2. Create the release. gh creates the tag on the remote at HEAD; no local tag needed.
 gh release create vX.Y.Z --title "vX.Y.Z — <headline>" --notes "..."
 ```
 
 **Do not `streamdeck pack` locally and attach the asset by hand.** `.github/workflows/release.yml` fires on `release: published`, runs `npm ci && npm run build`, stages a tiny `package.json` inside `com.ewels.type-deck.sdPlugin/` so `@nut-tree-fork/libnut` is installed alongside `bin/plugin.js` (all three `libnut-{darwin,win32,linux}` `.node` files), packs the plugin, and uploads `com.ewels.type-deck.streamDeckPlugin` to the release with `--clobber`. A locally-packed asset would only carry the host platform's libnut binary.
+
+`CHANGELOG.md` is the running record of user-visible changes (Keep a Changelog format, newest first). Add to its `## [Unreleased]` section as changes land, not at release time. The GitHub release notes are written separately and are chattier; the changelog entries are the terse version. The no-em-dashes convention applies to it.
 
 Release-notes style mirrors past releases: title is `vX.Y.Z — <headline>`, body has `## Highlights` and `## Install` sections. Check `gh release view vX.Y.Z` on a previous release for the exact template.
 
@@ -127,6 +131,10 @@ The recorder lives in `ui/finish-key.js`. It listens for `keydown` on `window` w
 ### Native keyboard / clipboard
 
 The plugin calls into [`@nut-tree-fork/libnut`](https://www.npmjs.com/package/@nut-tree-fork/libnut) directly (the raw native binding under nut-js) via its internal subpath `dist/import_libnut.js` — a type shim lives at `src/types/libnut.d.ts`. We use exactly three libnut functions: `typeString`, `keyTap`, `setKeyboardDelay`. Clipboard reads use a small `pbpaste` / PowerShell `Get-Clipboard` subprocess in `readClipboard()`; no clipboard dependency.
+
+`libnut.typeString` decodes UTF-8 into code points correctly, but on Windows and Linux it then truncates each code point to a single byte before mapping it to a physical key (`toggleUniKey((char)n, ...)` in libnut-core's `src/win32/keypress.c` / `src/linux/keypress.c`). Anything above U+007F is therefore typed as the wrong character or not at all, which is [issue #1](https://github.com/ewels/type-deck/issues/1). macOS passes the full code point to `CGEventKeyboardSetUnicodeString` and types any character verbatim.
+
+So the regular typing loop checks each character with `isNativelyTypeable()` and routes the ones libnut can't handle through `pasteText()` (clipboard write plus Cmd/Ctrl+V, the same helper the Instant type path uses). Consecutive untypeable characters are batched into a single paste, so a wholly non-Latin string is one paste rather than one per character. The original clipboard is read once, lazily, on the first paste of a run and restored in a `finally` when the run ends (an aborted run included). Where no clipboard is available (Linux) the loop falls back to `typeString` and logs a warning.
 
 The libnut package transitively installs `libnut-darwin`, `libnut-win32` and `libnut-linux` as regular deps — every install gets all three platform `.node` files, so packaging is platform-agnostic.
 
