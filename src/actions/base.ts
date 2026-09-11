@@ -443,7 +443,7 @@ export abstract class BaseTypeAction<
       } else {
         picked = this.pickText(settings);
       }
-      if (!picked || !picked.text) return;
+      if (!picked?.text) return;
 
       // Kick off the clipboard read in parallel with expandVariables — saves a
       // subprocess round-trip on every instant-paste press.
