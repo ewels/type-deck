@@ -237,13 +237,14 @@
   }
 
   // The key a combo resolves to, the same way parseKeyCombo() in base.ts does
-  // it: the last token that is not a modifier. Null means there is no key.
+  // it. Null when there is no key, or more than one: a combo is modifiers plus
+  // exactly one key, so a typo'd modifier ("shiftt+enter") is not a combo.
   function keyOf(combo) {
-    let key = null;
-    for (const part of combo.split("+").map((p) => p.trim().toLowerCase())) {
-      if (part && !MODIFIER_TOKENS.has(part)) key = part;
-    }
-    return key;
+    const keys = combo
+      .split("+")
+      .map((p) => p.trim().toLowerCase())
+      .filter((p) => p && !MODIFIER_TOKENS.has(p));
+    return keys.length === 1 ? keys[0] : null;
   }
 
   // An unknown key name throws from the native binding at press time and the
@@ -266,7 +267,7 @@
     const combo = document.createElement("input");
     combo.type = "text";
     combo.className = "step-combo";
-    combo.placeholder = "enter";
+    combo.placeholder = "e.g. shift+tab";
     combo.value = value;
     combo.addEventListener("input", () => {
       validate(combo);

@@ -267,17 +267,20 @@ export function parseKeyCombo(raw: unknown): KeyCombo | null {
     .filter((part) => part.length > 0);
 
   const modifiers: string[] = [];
-  let key: string | null = null;
+  const keys: string[] = [];
   for (const part of parts) {
     const modifier = MODIFIER_ALIASES[part];
     if (modifier) {
       if (!modifiers.includes(modifier)) modifiers.push(modifier);
     } else {
-      // Last non-modifier token wins, so "ctrl+a" and "a+ctrl" both work.
-      key = part;
+      keys.push(part);
     }
   }
-  if (key === null) return null;
+  // Exactly one key, in any position, so "ctrl+a" and "a+ctrl" both work but a
+  // typo'd modifier ("shiftt+enter") is rejected rather than quietly pressing
+  // plain enter.
+  if (keys.length !== 1) return null;
+  const key = keys[0];
   modifiers.sort(
     (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b),
   );
