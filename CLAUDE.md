@@ -38,6 +38,8 @@ prek auto-update          # bump pinned hook revs
 
 Hooks: standard pre-commit-hooks (whitespace/EOL/yaml/json/merge-conflict), Prettier (JSON/YAML/MD/HTML/CSS), Biome (lint + format for JS/TS).
 
+`package.json` pins `prettier` to an exact version rather than a `^` range, and that version must match the `mirrors-prettier` rev in `prek.toml`. Prettier's formatting changes between minors (3.5 moved a long `font-family` value onto its own line), so a floating range means `npm run format` writes output that CI's pinned hook then rejects. Bump both together.
+
 ## Release process
 
 The version lives in `com.ewels.type-deck.sdPlugin/manifest.json` as a four-part `X.Y.Z.0` string (Elgato's format — the trailing `.0` stays zero). `package.json` is `private: true` with no `version` field, so the manifest is the only place to bump.
