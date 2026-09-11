@@ -30,7 +30,7 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
   - Use `{{` and `}}` for literal braces.
 - **Unicode symbols.** Characters outside ASCII (`♯`, `é`, emoji) can't be sent as plain keystrokes on Windows, so they are inserted with a quick clipboard paste instead. Your clipboard contents are put back afterwards.
 - **Cancel or queue.** Pressing the key while it's already typing either aborts the current run (default) or queues another run to start immediately after, depending on the per-action setting.
-- **Finish keys.** Optionally press one or more key combos once the typing is done. Add a step, click _Record_ and press the keys you want, or type the combo in by hand. Steps run in order with a configurable delay before each, and any step can override that delay, for example to wait for a dialog to open before the next press. Handy for sending a message with Return without building a Multi Action and guessing how long the typing will take.
+- **Finish keys.** Optionally press one or more key combos once the typing is done (eg. <kbd>enter</kbd> or <kbd>cmd</kbd>+<kbd>a</kbd>). Add a step, click _Record_ and press the keys you want, or type the combo in by hand. Steps run in order with a configurable delay before each.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="Type Deck plugin in the Stream Deck app, showing the three actions and the Type text settings panel">
