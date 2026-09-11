@@ -2,12 +2,15 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-12
+
 ### Added
 
 - **Finish keys.** A per-action list of key combos that are pressed once the typing has finished. ([#2](https://github.com/ewels/type-deck/issues/2))
 
 ### Fixed
 
+- Actions now flash the Stream Deck failure indicator when a run fails (for example when macOS accessibility permission is missing), instead of doing nothing.
 - Characters outside ASCII (`♯`, `é`, emoji) are now inserted with a quick clipboard paste on Windows and Linux, where the underlying keyboard library typed them as the wrong character or not at all. Your clipboard contents are put back afterwards. ([#1](https://github.com/ewels/type-deck/issues/1))
 
 ## [0.2.1] - 2026-05-22
@@ -43,7 +46,8 @@ First public release.
 - Template variables expanded at type-time: `{date}`, `{time}`, `{clipboard}` and `{counter}`. Escape literal braces with `{{` and `}}`.
 - Cancel or queue a press while typing is already running.
 
-[unreleased]: https://github.com/ewels/type-deck/compare/v0.2.1...HEAD
+[unreleased]: https://github.com/ewels/type-deck/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ewels/type-deck/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/ewels/type-deck/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ewels/type-deck/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ewels/type-deck/releases/tag/v0.1.0
