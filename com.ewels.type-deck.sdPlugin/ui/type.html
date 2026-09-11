@@ -8,8 +8,9 @@
     <script src="finish-key.js"></script>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
       }
       .help {
         display: block;
@@ -71,19 +72,19 @@
         color: var(--color-content-primary, #d8d8d8);
         min-width: 0;
       }
-      .step-row input:disabled {
-        opacity: 0.4;
+      .step-row input.invalid {
+        border-color: #d64b4b;
       }
+      /* Fixed, and no shrinking: the last row carries the add button too, and
+         the boxes should still line up with the rows above it. */
       .step-combo {
-        flex: 1 1 auto;
-      }
-      .step-delay {
-        flex: 0 0 52px;
-        width: 52px;
+        flex: 0 0 130px;
+        width: 130px;
       }
       .step-record {
         flex: 0 0 auto;
       }
+      .step-add,
       .step-remove {
         flex: 0 0 auto;
         padding: 4px 8px;
@@ -131,13 +132,6 @@
     </sdpi-item>
 
     <div class="section">Finish keys</div>
-    <sdpi-item label="Finish keys">
-      <sdpi-checkbox
-        setting="finishKeyEnabled"
-        label="Press key combos once typing has finished"
-      ></sdpi-checkbox>
-    </sdpi-item>
-
     <!--
       The visible step rows are built by finish-key.js and serialised into this
       textarea, which is what actually persists the setting. Hidden rather than
@@ -150,23 +144,15 @@
     <sdpi-item label="Steps">
       <div data-finish-key-rows></div>
     </sdpi-item>
-    <sdpi-item label="">
-      <button type="button" data-finish-key-toggle data-add-step>
-        Add step
-      </button>
-    </sdpi-item>
     <small class="help">
-      Each step is one key press, run in order. Click "Record" on a step and
-      press the keys you want, or type the combo in by hand as modifiers plus a
-      key name joined with <code>+</code> (for example
+      Keys to press once the typing has finished. Click "Record" and press the
+      keys you want, or type in by hand (e.g.
       <code>meta+shift+enter</code>). Modifier names are <code>control</code>,
       <code>alt</code>, <code>shift</code> and <code>meta</code> (Command on
-      macOS, Windows key elsewhere). A few system shortcuts are swallowed by the
-      OS and cannot be recorded, so type those in.
+      macOS, Windows key elsewhere).
     </small>
-    <sdpi-item label="Default delay (ms)">
+    <sdpi-item label="Step delay (ms)">
       <sdpi-textfield
-        data-finish-key-toggle
         setting="finishKeyDelayMs"
         inputmode="numeric"
         pattern="[0-9]*"
@@ -174,10 +160,6 @@
         default="100"
       ></sdpi-textfield>
     </sdpi-item>
-    <small class="help">
-      How long to wait before each step. Give a step its own number to override
-      it, for example to wait for a dialog to open before the next press.
-    </small>
 
     <div class="section">Instant type</div>
     <sdpi-item label="Instant type">

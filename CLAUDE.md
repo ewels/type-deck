@@ -118,19 +118,19 @@ Timing/jitter/typo settings are all ignored when `instantType` is on; the PI HTM
 
 ### Finish keys
 
-`finishKeyEnabled` / `finishKeyCombo` / `finishKeyDelayMs` tap a list of key combos once a run has finished typing (issue #2: press Return after typing, without a Multi Action and a hand-calculated wait).
+`finishKeyCombo` / `finishKeyDelayMs` tap a list of key combos once a run has finished typing (issue #2: press Return after typing, without a Multi Action and a hand-calculated wait). There is no separate on/off flag: an empty list means nothing to press.
 
-`finishKeyCombo` holds the whole list as one newline-separated string, one step per line, each line a combo optionally followed by that step's own delay in ms:
+`finishKeyCombo` holds the whole list as one newline-separated string, one combo per line:
 
 ```
 enter
-meta+s 500
+meta+s
 enter
 ```
 
 - Applies to both the per-character path and the instant type path.
+- `finishKeyDelayMs` (default 100) is waited before _every_ step. There used to be a per-step override stored as a trailing number on the line; `parseFinishKeyCombos()` still strips a trailing number so old values load, but only when the line has more than one token, so a bare digit key (`1`) still reads as the key.
 - Skipped when the run was aborted, including an abort that lands during one of the delays.
-- `parseFinishKeySteps()` in `base.ts` splits the lines; a trailing number is that step's delay, but only when the line has more than one token, so a bare digit key (`1`) still reads as the key. Lines without their own number use `finishKeyDelayMs`.
 - `parseKeyCombo()` turns one combo (`"meta+shift+enter"`) into `libnut.keyTap(key, modifiers)` arguments. Modifier tokens normalise through `MODIFIER_ALIASES` to libnut's `control` / `alt` / `shift` / `meta`; the last non-modifier token is the key. Key names are libnut's own: `enter`, `tab`, `space`, `escape`, `up`, `pageup`, `f1`..`f24`, `numpad_0`.., plus single printable characters.
 - Modifier combos get the same `setKeyboardDelay(PASTE_MODIFIER_DELAY_MS)` treatment as the clipboard paste, for the same macOS reason.
 - An unrecognised key name throws from the native binding. `pressFinishKey` catches it per step, logs, and carries on with the rest, since the text has already been typed by that point.
@@ -138,11 +138,13 @@ enter
 
 #### The step editor
 
-`ui/finish-key.js` builds the visible step rows as **plain HTML** (`combo input`, `Record`, `delay`, `×`) and serialises them into a **hidden `sdpi-textarea`** bound to `finishKeyCombo`. That textarea is what actually persists: the rows never talk to Stream Deck themselves, so nothing depends on an sdpi-components API beyond `useSettings` and the `.value` setter that `instant-toggle.js` already relies on. The wrapper div carries `display: none` rather than the `hidden` attribute, because an sdpi component's own `:host { display: ... }` is an author rule and would beat the UA `[hidden]` rule.
+`ui/finish-key.js` builds the visible step rows as **plain HTML** (`Record`, `combo input`, `×`, plus a `+` button that rides along on the last row) and serialises them into a **hidden `sdpi-textarea`** bound to `finishKeyCombo`. That textarea is what actually persists: the rows never talk to Stream Deck themselves, so nothing depends on an sdpi-components API beyond `useSettings` and the `.value` setter that `instant-toggle.js` already relies on. The wrapper div carries `display: none` rather than the `hidden` attribute, because an sdpi component's own `:host { display: ... }` is an author rule and would beat the UA `[hidden]` rule.
 
 Two-way binding needs a guard: writing `store.value` echoes back through `useSettings`, and re-rendering on that echo would rebuild the rows under the user and lose the caret mid-edit. `lastSerialized` holds the text we last wrote, and the subscription ignores any value equal to it. Row edits commit on a 400 ms debounce (plus immediately on `change` and on a finished recording).
 
 Recording is per row. `record(button, input)` listens for `keydown` on `window` with capture + `preventDefault`, reads `event.code` rather than `event.key` (so Shift+1 records as `shift+1`, not `shift+!`), previews the modifiers held so far in the button label, and writes the canonical string into that row's input. Only one recording runs at a time (`stopRecording`). Combos the OS swallows before the webview sees them (Cmd+Q and friends) cannot be recorded, which is why every row stays hand-editable.
+
+Hand-edited combos are validated as you type: `validate()` resolves the combo to its key the same way `parseKeyCombo()` does and red-outlines the input unless that key is in `VALID_KEYS` (libnut's key names, built from `CODE_TO_KEY` plus the names no physical key maps to) or a single character. Without it an unknown name is silently dropped at press time.
 
 ### Native keyboard / clipboard
 

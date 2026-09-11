@@ -52,8 +52,55 @@
     CODE_TO_KEY[`Key${letter.toUpperCase()}`] = letter;
   }
 
+  // Key names libnut accepts that no physical key press maps to, so they are
+  // absent from CODE_TO_KEY but still valid when typed by hand.
+  const VALID_KEYS = new Set([
+    ...Object.values(CODE_TO_KEY),
+    "add",
+    "clear",
+    "numpad_equal",
+    "return",
+    "fn",
+    "right_alt",
+    "right_cmd",
+    "right_control",
+    "right_meta",
+    "right_shift",
+    "right_win",
+    "audio_mute",
+    "audio_vol_down",
+    "audio_vol_up",
+    "audio_play",
+    "audio_pause",
+    "audio_stop",
+    "audio_next",
+    "audio_prev",
+    "audio_rewind",
+    "audio_forward",
+    "audio_repeat",
+    "audio_random",
+  ]);
+
+  // Mirrors MODIFIER_ALIASES in src/actions/base.ts.
+  const MODIFIER_TOKENS = new Set([
+    "ctrl",
+    "control",
+    "alt",
+    "option",
+    "opt",
+    "shift",
+    "meta",
+    "cmd",
+    "command",
+    "super",
+    "win",
+  ]);
+
   const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/;
   const COMMIT_DEBOUNCE_MS = 400;
+  const COMBO_HINT =
+    "A key name such as enter, tab, escape, f5, up or a single character, " +
+    "optionally after modifiers: meta+shift+enter.";
 
   // Order matters: it is the canonical form the plugin stores.
   function modifiersOf(ev) {
@@ -75,41 +122,50 @@
     return null;
   }
 
-  // One step per line: a combo, optionally followed by that step's own delay.
-  // Mirrors parseFinishKeySteps() in src/actions/base.ts.
+  // One combo per line. A trailing number is a per-step delay from an earlier
+  // build; it is dropped. Mirrors parseFinishKeyCombos() in src/actions/base.ts.
   function parseLine(line) {
-    const tokens = line
-      .trim()
-      .split(/\s+/)
-      .filter((token) => token.length > 0);
+    const tokens = line.trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return null;
-    let delay = "";
-    const last = tokens[tokens.length - 1];
-    if (tokens.length > 1 && /^\d+$/.test(last)) {
+    if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1])) {
       tokens.pop();
-      delay = last;
     }
-    return { combo: tokens.join(""), delay };
+    return tokens.join("");
   }
 
   // The visible rows are plain HTML. They serialise into a hidden
   // sdpi-textarea, which is what actually persists the setting.
   let store = null;
   let rowsEl = null;
-  let enabled = false;
   let ready = false;
   let pending = null;
   let lastSerialized = null;
   let stopRecording = null;
   let commitTimer = null;
 
+  // Built here rather than in the HTML so it can ride along at the end of the
+  // last row, instead of in an sdpi-item with an empty label.
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className = "step-add";
+  addButton.textContent = "+";
+  addButton.title = "Add another step";
+  addButton.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    rowsEl.appendChild(makeRow(""));
+    placeAddButton();
+  });
+
+  // The button lives in the last row, so it moves whenever the rows change.
+  function placeAddButton() {
+    rowsEl.lastElementChild?.appendChild(addButton);
+  }
+
   function serialize() {
     const lines = [];
-    for (const row of rowsEl.children) {
-      const combo = row.querySelector(".step-combo").value.trim();
-      if (!combo) continue;
-      const delay = row.querySelector(".step-delay").value.trim();
-      lines.push(/^\d+$/.test(delay) ? `${combo} ${delay}` : combo);
+    for (const row of rowsEl.querySelectorAll(".step-combo")) {
+      const combo = row.value.trim();
+      if (combo) lines.push(combo);
     }
     return lines.join("\n");
   }
@@ -126,17 +182,6 @@
     clearTimeout(commitTimer);
     commitTimer = setTimeout(commit, COMMIT_DEBOUNCE_MS);
   };
-
-  function applyEnabled() {
-    for (const el of document.querySelectorAll("[data-finish-key-toggle]")) {
-      el.disabled = !enabled;
-    }
-    if (!rowsEl) return;
-    for (const el of rowsEl.querySelectorAll("input, button")) {
-      el.disabled = !enabled;
-    }
-    if (!enabled && stopRecording) stopRecording();
-  }
 
   function record(button, input) {
     if (stopRecording) stopRecording();
@@ -171,6 +216,7 @@
         return;
       }
       input.value = [...modifiersOf(ev), key].join("+");
+      validate(input);
       stop();
       commit();
     }
@@ -190,7 +236,30 @@
     window.addEventListener("blur", stop);
   }
 
-  function makeRow(step) {
+  // The key a combo resolves to, the same way parseKeyCombo() in base.ts does
+  // it: the last token that is not a modifier. Null means there is no key.
+  function keyOf(combo) {
+    let key = null;
+    for (const part of combo.split("+").map((p) => p.trim().toLowerCase())) {
+      if (part && !MODIFIER_TOKENS.has(part)) key = part;
+    }
+    return key;
+  }
+
+  // An unknown key name throws from the native binding at press time and the
+  // step is silently skipped, so flag it here instead.
+  function validate(input) {
+    const combo = input.value.trim();
+    const key = combo ? keyOf(combo) : null;
+    const ok =
+      !combo || (key !== null && (VALID_KEYS.has(key) || key.length === 1));
+    input.classList.toggle("invalid", !ok);
+    input.title = ok
+      ? COMBO_HINT
+      : `"${combo}" is not a key Stream Deck can press. ${COMBO_HINT}`;
+  }
+
+  function makeRow(value) {
     const row = document.createElement("div");
     row.className = "step-row";
 
@@ -198,9 +267,13 @@
     combo.type = "text";
     combo.className = "step-combo";
     combo.placeholder = "enter";
-    combo.value = step.combo;
-    combo.addEventListener("input", commitSoon);
+    combo.value = value;
+    combo.addEventListener("input", () => {
+      validate(combo);
+      commitSoon();
+    });
     combo.addEventListener("change", commit);
+    validate(combo);
 
     const recordButton = document.createElement("button");
     recordButton.type = "button";
@@ -211,16 +284,6 @@
       record(recordButton, combo);
     });
 
-    const delay = document.createElement("input");
-    delay.type = "text";
-    delay.className = "step-delay";
-    delay.inputMode = "numeric";
-    delay.placeholder = "ms";
-    delay.title = "Delay before this step. Leave blank for the default.";
-    delay.value = step.delay;
-    delay.addEventListener("input", commitSoon);
-    delay.addEventListener("change", commit);
-
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "step-remove";
@@ -229,27 +292,25 @@
     remove.addEventListener("click", (ev) => {
       ev.preventDefault();
       row.remove();
-      if (rowsEl.children.length === 0) {
-        rowsEl.appendChild(makeRow({ combo: "", delay: "" }));
-      }
-      applyEnabled();
+      if (rowsEl.children.length === 0) rowsEl.appendChild(makeRow(""));
+      placeAddButton();
       commit();
     });
 
-    row.append(combo, recordButton, delay, remove);
+    row.append(recordButton, combo, remove);
     return row;
   }
 
   function render(text) {
     if (stopRecording) stopRecording();
     rowsEl.textContent = "";
-    const steps = String(text ?? "")
+    const combos = String(text ?? "")
       .split(/\r?\n/)
       .map(parseLine)
-      .filter((step) => step !== null);
-    if (steps.length === 0) steps.push({ combo: "", delay: "" });
-    for (const step of steps) rowsEl.appendChild(makeRow(step));
-    applyEnabled();
+      .filter((combo) => combo !== null);
+    if (combos.length === 0) combos.push("");
+    for (const combo of combos) rowsEl.appendChild(makeRow(combo));
+    placeAddButton();
   }
 
   // Subscribe at module scope: sdpi-components broadcasts the saved settings
@@ -267,11 +328,6 @@
     render(text);
   });
 
-  SDPIComponents.useSettings("finishKeyEnabled", (value) => {
-    enabled = !!value;
-    applyEnabled();
-  });
-
   document.addEventListener("DOMContentLoaded", () => {
     store = document.querySelector('sdpi-textarea[setting="finishKeyCombo"]');
     rowsEl = document.querySelector("[data-finish-key-rows]");
@@ -279,21 +335,5 @@
 
     ready = true;
     render(pending);
-
-    document
-      .querySelector("[data-add-step]")
-      ?.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        rowsEl.appendChild(makeRow({ combo: "", delay: "" }));
-        applyEnabled();
-      });
-
-    const cb = document.querySelector(
-      'sdpi-checkbox[setting="finishKeyEnabled"]',
-    );
-    cb?.addEventListener("valuechange", () => {
-      enabled = !!cb.value;
-      applyEnabled();
-    });
   });
 })();

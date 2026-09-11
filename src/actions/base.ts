@@ -120,7 +120,6 @@ export type BaseTypingSettings = {
   counter?: number;
   cancelOnSecondPress?: boolean;
 
-  finishKeyEnabled?: boolean;
   finishKeyCombo?: string;
   finishKeyDelayMs?: number | string;
 };
@@ -285,43 +284,28 @@ export function parseKeyCombo(raw: unknown): KeyCombo | null {
   return { key, modifiers };
 }
 
-export type FinishKeyStep = { combo: KeyCombo; delayMs: number };
-
 /**
- * Parse the stored finish-key list, one step per line. A line is a combo,
- * optionally followed by that step's own delay in ms:
+ * Parse the stored finish-key list, one combo per line:
  *
  *     enter
- *     meta+s 500
+ *     meta+s
  *     enter
  *
- * Lines without their own delay fall back to `defaultDelayMs`.
+ * A trailing number is ignored: earlier builds stored a per-step delay there.
  */
-export function parseFinishKeySteps(
-  raw: unknown,
-  defaultDelayMs: number,
-): FinishKeyStep[] {
-  const steps: FinishKeyStep[] = [];
+export function parseFinishKeyCombos(raw: unknown): KeyCombo[] {
+  const combos: KeyCombo[] = [];
   for (const line of String(raw ?? "").split(/\r?\n/)) {
-    const tokens = line
-      .trim()
-      .split(/\s+/)
-      .filter((token) => token.length > 0);
-    if (tokens.length === 0) continue;
-
-    let delayMs = defaultDelayMs;
-    // Only a trailing number *after* something else is a delay, so a bare
-    // digit key ("1") still reads as the key rather than as a delay.
-    const last = tokens[tokens.length - 1];
-    if (tokens.length > 1 && /^\d+$/.test(last)) {
+    const tokens = line.trim().split(/\s+/).filter(Boolean);
+    // Only a trailing number *after* something else is a stale delay, so a
+    // bare digit key ("1") still reads as the key.
+    if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1])) {
       tokens.pop();
-      delayMs = Number.parseInt(last, 10);
     }
-
     const combo = parseKeyCombo(tokens.join(""));
-    if (combo) steps.push({ combo, delayMs });
+    if (combo) combos.push(combo);
   }
-  return steps;
+  return combos;
 }
 
 /**
@@ -406,17 +390,18 @@ export abstract class BaseTypeAction<
   }
 
   /**
-   * Tap each configured combo in turn once the run has finished typing. Skipped
-   * when the run was aborted, including an abort during one of the delays.
+   * Tap each configured combo in turn once the run has finished typing. No
+   * combos means nothing to press. Skipped when the run was aborted, including
+   * an abort during one of the delays.
    */
   private async pressFinishKey(settings: S): Promise<void> {
-    if (!settings.finishKeyEnabled) return;
-    const steps = parseFinishKeySteps(
-      settings.finishKeyCombo,
-      toNumber(settings.finishKeyDelayMs, DEFAULTS.finishKeyDelayMs),
+    const combos = parseFinishKeyCombos(settings.finishKeyCombo);
+    const delayMs = toNumber(
+      settings.finishKeyDelayMs,
+      DEFAULTS.finishKeyDelayMs,
     );
 
-    for (const { combo, delayMs } of steps) {
+    for (const combo of combos) {
       if (delayMs > 0) await sleep(delayMs);
       if (this.abortRequested) return;
 
