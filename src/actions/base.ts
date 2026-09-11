@@ -119,6 +119,9 @@ export type BaseTypingSettings = {
 
   counter?: number;
   cancelOnSecondPress?: boolean;
+
+  finishKeyCombo?: string;
+  finishKeyDelayMs?: number | string;
 };
 
 export const DEFAULTS = {
@@ -129,6 +132,7 @@ export const DEFAULTS = {
   typoChance: 3,
   typoCorrectionMs: 400,
   longPressThresholdMs: 500,
+  finishKeyDelayMs: 100,
 } as const;
 
 const PREVIEW_MAX_LEN = 20;
@@ -231,6 +235,82 @@ async function expandVariables(text: string, counter: number): Promise<string> {
   });
 }
 
+// Modifier names accepted in a stored combo, normalized to the names libnut
+// expects. "meta" is Command on macOS and the Windows key elsewhere.
+const MODIFIER_ALIASES: Record<string, string> = {
+  ctrl: "control",
+  control: "control",
+  alt: "alt",
+  option: "alt",
+  opt: "alt",
+  shift: "shift",
+  meta: "meta",
+  cmd: "meta",
+  command: "meta",
+  super: "meta",
+  win: "meta",
+};
+
+// Canonical serialization order, matching what the property inspector records.
+const MODIFIER_ORDER = ["control", "alt", "shift", "meta"];
+
+export type KeyCombo = { key: string; modifiers: string[] };
+
+/**
+ * Parse a stored combo string such as "meta+shift+enter" into the key name and
+ * modifier list that libnut.keyTap wants. Returns null if there is no key.
+ */
+export function parseKeyCombo(raw: unknown): KeyCombo | null {
+  const parts = String(raw ?? "")
+    .split("+")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0);
+
+  const modifiers: string[] = [];
+  const keys: string[] = [];
+  for (const part of parts) {
+    const modifier = MODIFIER_ALIASES[part];
+    if (modifier) {
+      if (!modifiers.includes(modifier)) modifiers.push(modifier);
+    } else {
+      keys.push(part);
+    }
+  }
+  // Exactly one key, in any position, so "ctrl+a" and "a+ctrl" both work but a
+  // typo'd modifier ("shiftt+enter") is rejected rather than quietly pressing
+  // plain enter.
+  if (keys.length !== 1) return null;
+  const key = keys[0];
+  modifiers.sort(
+    (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b),
+  );
+  return { key, modifiers };
+}
+
+/**
+ * Parse the stored finish-key list, one combo per line:
+ *
+ *     enter
+ *     meta+s
+ *     enter
+ *
+ * A trailing number is ignored: earlier builds stored a per-step delay there.
+ */
+export function parseFinishKeyCombos(raw: unknown): KeyCombo[] {
+  const combos: KeyCombo[] = [];
+  for (const line of String(raw ?? "").split(/\r?\n/)) {
+    const tokens = line.trim().split(/\s+/).filter(Boolean);
+    // Only a trailing number *after* something else is a stale delay, so a
+    // bare digit key ("1") still reads as the key.
+    if (tokens.length > 1 && /^\d+$/.test(tokens[tokens.length - 1])) {
+      tokens.pop();
+    }
+    const combo = parseKeyCombo(tokens.join(""));
+    if (combo) combos.push(combo);
+  }
+  return combos;
+}
+
 /**
  * Result of picking the text to type for a single press.
  * `update` is merged into settings and persisted before typing starts, so an
@@ -312,6 +392,41 @@ export abstract class BaseTypeAction<
     }
   }
 
+  /**
+   * Tap each configured combo in turn once the run has finished typing. No
+   * combos means nothing to press. Skipped when the run was aborted, including
+   * an abort during one of the delays.
+   */
+  private async pressFinishKey(settings: S): Promise<void> {
+    const combos = parseFinishKeyCombos(settings.finishKeyCombo);
+    const delayMs = toNumber(
+      settings.finishKeyDelayMs,
+      DEFAULTS.finishKeyDelayMs,
+    );
+
+    for (const combo of combos) {
+      if (delayMs > 0) await sleep(delayMs);
+      if (this.abortRequested) return;
+
+      // Same reason as the clipboard paste: keyboardDelay is 0, so there is no
+      // gap between the modifier press and the key tap and macOS drops it.
+      const needsGap = combo.modifiers.length > 0;
+      if (needsGap) libnut.setKeyboardDelay(PASTE_MODIFIER_DELAY_MS);
+      try {
+        libnut.keyTap(combo.key, combo.modifiers);
+      } catch (err) {
+        // An unrecognised key name throws from the native binding. The text is
+        // already typed, so log this step and carry on with the rest.
+        streamDeck.logger.error(
+          `Could not press finish key "${[...combo.modifiers, combo.key].join("+")}"`,
+          err,
+        );
+      } finally {
+        if (needsGap) libnut.setKeyboardDelay(0);
+      }
+    }
+  }
+
   private async runTyping(
     action: KeyDownEvent<S>["action"],
     settings: S,
@@ -360,6 +475,7 @@ export abstract class BaseTypeAction<
             if (i < lines.length - 1) libnut.keyTap("enter", []);
           }
         }
+        await this.pressFinishKey(settings);
         return;
       }
 
@@ -461,6 +577,7 @@ export abstract class BaseTypeAction<
       } finally {
         if (savedClipboard) await writeClipboard(savedClipboard);
       }
+      await this.pressFinishKey(settings);
     } catch (err) {
       streamDeck.logger.error("Typing run failed", err);
       await action.showAlert();

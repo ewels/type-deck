@@ -38,6 +38,8 @@ prek auto-update          # bump pinned hook revs
 
 Hooks: standard pre-commit-hooks (whitespace/EOL/yaml/json/merge-conflict), Prettier (JSON/YAML/MD/HTML/CSS), Biome (lint + format for JS/TS).
 
+`package.json` pins `prettier` to an exact version rather than a `^` range, and that version must match the `mirrors-prettier` rev in `prek.toml`. Prettier's formatting changes between minors (3.5 moved a long `font-family` value onto its own line), so a floating range means `npm run format` writes output that CI's pinned hook then rejects. Bump both together.
+
 ## Release process
 
 The version lives in `com.ewels.type-deck.sdPlugin/manifest.json` as a four-part `X.Y.Z.0` string (Elgato's format — the trailing `.0` stays zero). `package.json` is `private: true` with no `version` field, so the manifest is the only place to bump.
@@ -74,6 +76,8 @@ com.ewels.type-deck.sdPlugin/
   ui/type.html          property inspector (sdpi-components v4 over CDN)
   ui/cycle.html         PI for Cycle
   ui/random.html        PI for Random pick
+  ui/instant-toggle.js  PI script: greys out timing fields when Instant type is on
+  ui/finish-key.js      PI script: step editor + key recorder for the finish keys
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 rollup.config.mjs       bundles src/ to bin/plugin.js
@@ -113,6 +117,36 @@ If `settings.instantType` is set, the per-character typing loop is bypassed. The
 If `writeClipboard` is unavailable (Linux has no `pbcopy` / `Set-Clipboard`) or fails, the path falls back to a line-by-line `libnut.typeString` + `keyTap("enter")` loop (still bypassing per-character timing / jitter / typos — those only apply to the regular typing path).
 
 Timing/jitter/typo settings are all ignored when `instantType` is on; the PI HTML greys them out.
+
+### Finish keys
+
+`finishKeyCombo` / `finishKeyDelayMs` tap a list of key combos once a run has finished typing (issue #2: press Return after typing, without a Multi Action and a hand-calculated wait). There is no separate on/off flag: an empty list means nothing to press.
+
+`finishKeyCombo` holds the whole list as one newline-separated string, one combo per line:
+
+```
+enter
+meta+s
+enter
+```
+
+- Applies to both the per-character path and the instant type path.
+- `finishKeyDelayMs` (default 100) is waited before _every_ step. There used to be a per-step override stored as a trailing number on the line; `parseFinishKeyCombos()` still strips a trailing number so old values load, but only when the line has more than one token, so a bare digit key (`1`) still reads as the key.
+- Skipped when the run was aborted, including an abort that lands during one of the delays.
+- `parseKeyCombo()` turns one combo (`"meta+shift+enter"`) into `libnut.keyTap(key, modifiers)` arguments. Modifier tokens normalise through `MODIFIER_ALIASES` to libnut's `control` / `alt` / `shift` / `meta`; exactly one token must be left over, and that is the key. Two keys is not a combo, so a typo'd modifier (`shiftt+enter`) returns null rather than quietly pressing plain `enter`. Key names are libnut's own: `enter`, `tab`, `space`, `escape`, `up`, `pageup`, `f1`..`f24`, `numpad_0`.., plus single printable characters.
+- Modifier combos get the same `setKeyboardDelay(PASTE_MODIFIER_DELAY_MS)` treatment as the clipboard paste, for the same macOS reason.
+- An unrecognised key name throws from the native binding. `pressFinishKey` catches it per step, logs, and carries on with the rest, since the text has already been typed by that point.
+- A single-combo value saved by an earlier build (`meta+shift+enter`, no newlines) reads as a one-step list, so old settings keep working.
+
+#### The step editor
+
+`ui/finish-key.js` builds the visible step rows as **plain HTML** (`Record`, `combo input`, `×`, plus a `+` button that rides along on the last row) and serialises them into a **hidden `sdpi-textarea`** bound to `finishKeyCombo`. That textarea is what actually persists: the rows never talk to Stream Deck themselves, so nothing depends on an sdpi-components API beyond `useSettings` and the `.value` setter that `instant-toggle.js` already relies on. The wrapper div carries `display: none` rather than the `hidden` attribute, because an sdpi component's own `:host { display: ... }` is an author rule and would beat the UA `[hidden]` rule.
+
+Two-way binding needs a guard: writing `store.value` echoes back through `useSettings`, and re-rendering on that echo would rebuild the rows under the user and lose the caret mid-edit. `lastSerialized` holds the text we last wrote, and the subscription ignores any value equal to it. Row edits commit on a 400 ms debounce (plus immediately on `change` and on a finished recording).
+
+Recording is per row. `record(button, input)` listens for `keydown` on `window` with capture + `preventDefault`, reads `event.code` rather than `event.key` (so Shift+1 records as `shift+1`, not `shift+!`), previews the modifiers held so far in the button label, and writes the canonical string into that row's input. Only one recording runs at a time (`stopRecording`). Combos the OS swallows before the webview sees them (Cmd+Q and friends) cannot be recorded, which is why every row stays hand-editable.
+
+Hand-edited combos are validated as you type: `validate()` resolves the combo to its key the same way `parseKeyCombo()` does and red-outlines the input unless that key is in `VALID_KEYS` (libnut's key names, built from `CODE_TO_KEY` plus the names no physical key maps to) or a single character. Without it an unknown name is silently dropped at press time.
 
 ### Native keyboard / clipboard
 

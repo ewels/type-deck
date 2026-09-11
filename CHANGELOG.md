@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Finish keys.** A per-action list of key combos that are pressed once the typing has finished. Leave it empty for none. Saves building a Multi Action with a hand-calculated wait just to send a message with Return. ([#2](https://github.com/ewels/type-deck/issues/2))
+  - Add as many steps as you like. They run in order, each with its own _Record_ button, so a sequence like Tab, Tab, Return is a few clicks.
+  - Record a combo by pressing the keys, or type it in by hand for the few shortcuts the OS swallows before the settings panel sees them.
+  - A combo that Stream Deck cannot press is outlined in red as you type it, rather than being silently skipped at press time. That includes a misspelled modifier, which used to be dropped so that `shiftt+enter` pressed a bare Return.
+  - A delay (100 ms by default) is applied before each step, so a step can wait for something like a dialog to open first.
+
 ### Fixed
 
 - Characters outside ASCII (`♯`, `é`, emoji) are now inserted with a quick clipboard paste on Windows and Linux, where the underlying keyboard library typed them as the wrong character or not at all. Your clipboard contents are put back afterwards. ([#1](https://github.com/ewels/type-deck/issues/1))
