@@ -8,6 +8,10 @@
 
 - **Finish keys.** A per-action list of key combos that are pressed once the typing has finished. ([#2](https://github.com/ewels/type-deck/issues/2))
 
+### Changed
+
+- Updated the Stream Deck SDK to 2.1.2, along with the build and lint tooling.
+
 ### Fixed
 
 - Actions now flash the Stream Deck failure indicator when a run fails (for example when macOS accessibility permission is missing), instead of doing nothing.
