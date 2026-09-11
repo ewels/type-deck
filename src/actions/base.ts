@@ -87,6 +87,10 @@ export type BaseTypingSettings = {
 
   counter?: number;
   cancelOnSecondPress?: boolean;
+
+  finishKeyEnabled?: boolean;
+  finishKeyCombo?: string;
+  finishKeyDelayMs?: number | string;
 };
 
 export const DEFAULTS = {
@@ -97,6 +101,7 @@ export const DEFAULTS = {
   typoChance: 3,
   typoCorrectionMs: 400,
   longPressThresholdMs: 500,
+  finishKeyDelayMs: 100,
 } as const;
 
 const PREVIEW_MAX_LEN = 20;
@@ -199,6 +204,55 @@ async function expandVariables(text: string, counter: number): Promise<string> {
   });
 }
 
+// Modifier names accepted in a stored combo, normalized to the names libnut
+// expects. "meta" is Command on macOS and the Windows key elsewhere.
+const MODIFIER_ALIASES: Record<string, string> = {
+  ctrl: "control",
+  control: "control",
+  alt: "alt",
+  option: "alt",
+  opt: "alt",
+  shift: "shift",
+  meta: "meta",
+  cmd: "meta",
+  command: "meta",
+  super: "meta",
+  win: "meta",
+};
+
+// Canonical serialization order, matching what the property inspector records.
+const MODIFIER_ORDER = ["control", "alt", "shift", "meta"];
+
+export type KeyCombo = { key: string; modifiers: string[] };
+
+/**
+ * Parse a stored combo string such as "meta+shift+enter" into the key name and
+ * modifier list that libnut.keyTap wants. Returns null if there is no key.
+ */
+export function parseKeyCombo(raw: unknown): KeyCombo | null {
+  const parts = String(raw ?? "")
+    .split("+")
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0);
+
+  const modifiers: string[] = [];
+  let key: string | null = null;
+  for (const part of parts) {
+    const modifier = MODIFIER_ALIASES[part];
+    if (modifier) {
+      if (!modifiers.includes(modifier)) modifiers.push(modifier);
+    } else {
+      // Last non-modifier token wins, so "ctrl+a" and "a+ctrl" both work.
+      key = part;
+    }
+  }
+  if (key === null) return null;
+  modifiers.sort(
+    (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b),
+  );
+  return { key, modifiers };
+}
+
 /**
  * Result of picking the text to type for a single press.
  * `update` is merged into settings and persisted before typing starts, so an
@@ -280,6 +334,40 @@ export abstract class BaseTypeAction<
     }
   }
 
+  /**
+   * Tap the configured combo once the run has finished typing. Skipped when the
+   * run was aborted, or when the user aborts during the post-typing delay.
+   */
+  private async pressFinishKey(settings: S): Promise<void> {
+    if (!settings.finishKeyEnabled) return;
+    const combo = parseKeyCombo(settings.finishKeyCombo);
+    if (!combo) return;
+
+    const delayMs = toNumber(
+      settings.finishKeyDelayMs,
+      DEFAULTS.finishKeyDelayMs,
+    );
+    if (delayMs > 0) await sleep(delayMs);
+    if (this.abortRequested) return;
+
+    // Same reason as the instant-type paste: keyboardDelay is 0, so there is no
+    // gap between the modifier press and the key tap and macOS drops the combo.
+    const needsGap = combo.modifiers.length > 0;
+    if (needsGap) libnut.setKeyboardDelay(40);
+    try {
+      libnut.keyTap(combo.key, combo.modifiers);
+    } catch (err) {
+      // An unrecognised key name throws from the native binding. The text is
+      // already typed, so log and carry on rather than failing the whole run.
+      streamDeck.logger.error(
+        `Could not press finish key combo "${settings.finishKeyCombo}"`,
+        err,
+      );
+    } finally {
+      if (needsGap) libnut.setKeyboardDelay(0);
+    }
+  }
+
   private async runTyping(
     action: KeyDownEvent<S>["action"],
     settings: S,
@@ -341,6 +429,7 @@ export abstract class BaseTypeAction<
             if (i < lines.length - 1) libnut.keyTap("enter", []);
           }
         }
+        await this.pressFinishKey(settings);
         return;
       }
 
@@ -406,6 +495,7 @@ export abstract class BaseTypeAction<
         }
       }
       flush();
+      await this.pressFinishKey(settings);
     } catch (err) {
       streamDeck.logger.error("Typing run failed", err);
       await action.showAlert();

@@ -70,6 +70,8 @@ com.ewels.type-deck.sdPlugin/
   ui/type.html          property inspector (sdpi-components v4 over CDN)
   ui/cycle.html         PI for Cycle
   ui/random.html        PI for Random pick
+  ui/instant-toggle.js  PI script: greys out timing fields when Instant type is on
+  ui/finish-key.js      PI script: key-combo recorder for the finish key
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 rollup.config.mjs       bundles src/ to bin/plugin.js
@@ -109,6 +111,18 @@ If `settings.instantType` is set, the per-character typing loop is bypassed. The
 If `writeClipboard` is unavailable (Linux has no `pbcopy` / `Set-Clipboard`) or fails, the path falls back to a line-by-line `libnut.typeString` + `keyTap("enter")` loop (still bypassing per-character timing / jitter / typos — those only apply to the regular typing path).
 
 Timing/jitter/typo settings are all ignored when `instantType` is on; the PI HTML greys them out.
+
+### Finish key
+
+`finishKeyEnabled` / `finishKeyCombo` / `finishKeyDelayMs` tap one key combo once a run has finished typing (issue #2: press Return after typing, without a Multi Action and a hand-calculated wait).
+
+- Applies to both the per-character path and the instant type path.
+- Skipped when the run was aborted, including an abort that lands during `finishKeyDelayMs`.
+- `parseKeyCombo()` in `base.ts` turns the stored string (`"meta+shift+enter"`) into `libnut.keyTap(key, modifiers)` arguments. Modifier tokens normalise through `MODIFIER_ALIASES` to libnut's `control` / `alt` / `shift` / `meta`; the last non-modifier token is the key. Key names are libnut's own: `enter`, `tab`, `space`, `escape`, `up`, `pageup`, `f1`..`f24`, `numpad_0`.., plus single printable characters.
+- Modifier combos get the same `setKeyboardDelay(40)` treatment as the instant-type paste, for the same macOS reason.
+- An unrecognised key name throws from the native binding. `pressFinishKey` catches and logs it rather than failing the run, since the text has already been typed by that point.
+
+The recorder lives in `ui/finish-key.js`. It listens for `keydown` on `window` with capture + `preventDefault`, reads `event.code` rather than `event.key` (so Shift+1 records as `shift+1`, not `shift+!`), and writes the canonical string into the `finishKeyCombo` sdpi-textfield by assigning `.value` (same persistence trick as `instant-toggle.js`). Combos the OS swallows before the webview sees them (Cmd+Q and friends) cannot be recorded, which is why the field stays hand-editable.
 
 ### Native keyboard / clipboard
 

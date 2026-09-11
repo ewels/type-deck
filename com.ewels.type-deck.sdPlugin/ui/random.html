@@ -5,10 +5,12 @@
     <meta charset="utf-8" />
     <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
     <script src="instant-toggle.js"></script>
+    <script src="finish-key.js"></script>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
       }
       .help {
         display: block;
@@ -26,6 +28,31 @@
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: var(--color-content-secondary, #999);
+      }
+      .buttons {
+        display: flex;
+        gap: 6px;
+      }
+      .buttons button {
+        font-family: inherit;
+        font-size: 11px;
+        padding: 4px 10px;
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        background: var(--color-surface, #3d3d3d);
+        color: var(--color-content-primary, #d8d8d8);
+        cursor: pointer;
+      }
+      .buttons button:hover:not(:disabled) {
+        background: var(--color-surface-hover, #4d4d4d);
+      }
+      .buttons button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .buttons button.recording {
+        border-color: var(--color-info, #4b9cff);
+        color: var(--color-info, #4b9cff);
       }
     </style>
   </head>
@@ -45,6 +72,53 @@
       <code>{clipboard}</code> = current clipboard text,
       <code>{counter}</code> = press count. Use <code>{{</code> and
       <code>}}</code> for literal braces.
+    </small>
+
+    <div class="section">Finish key</div>
+    <sdpi-item label="Finish key">
+      <sdpi-checkbox
+        setting="finishKeyEnabled"
+        label="Press a key combo once typing has finished"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <sdpi-item label="Key combo">
+      <sdpi-textfield
+        data-finish-key-toggle
+        setting="finishKeyCombo"
+        placeholder="enter"
+      ></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Record">
+      <div class="buttons">
+        <button type="button" data-finish-key-toggle data-record-combo>
+          Record combo
+        </button>
+        <button type="button" data-finish-key-toggle data-clear-combo>
+          Clear
+        </button>
+      </div>
+    </sdpi-item>
+    <small class="help">
+      Click "Record combo" and press the keys you want, for example Return or
+      Cmd+Shift+Return. A few system shortcuts are swallowed by the OS and
+      cannot be recorded: those can be typed into the field by hand, as
+      modifiers plus a key name joined with <code>+</code> (for example
+      <code>meta+shift+enter</code>). Modifier names are <code>control</code>,
+      <code>alt</code>, <code>shift</code> and <code>meta</code> (Command on
+      macOS, Windows key elsewhere).
+    </small>
+    <sdpi-item label="Delay before (ms)">
+      <sdpi-textfield
+        data-finish-key-toggle
+        setting="finishKeyDelayMs"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="100"
+        default="100"
+      ></sdpi-textfield>
+    </sdpi-item>
+    <small class="help">
+      How long to wait after the last character before pressing the combo.
     </small>
 
     <div class="section">Instant type</div>

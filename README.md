@@ -29,6 +29,7 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
   - `{counter}` → number of presses (persisted per action)
   - Use `{{` and `}}` for literal braces.
 - **Cancel or queue.** Pressing the key while it's already typing either aborts the current run (default) or queues another run to start immediately after, depending on the per-action setting.
+- **Finish key.** Optionally press a key combo once the typing is done, after a configurable delay. Click _Record combo_ in the settings panel and press the keys you want, or type the combo in by hand. Handy for sending a message with Return without building a Multi Action and guessing how long the typing will take.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="Type Deck plugin in the Stream Deck app, showing the three actions and the Type text settings panel">
