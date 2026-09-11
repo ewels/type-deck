@@ -75,7 +75,7 @@ com.ewels.type-deck.sdPlugin/
   ui/cycle.html         PI for Cycle
   ui/random.html        PI for Random pick
   ui/instant-toggle.js  PI script: greys out timing fields when Instant type is on
-  ui/finish-key.js      PI script: key-combo recorder for the finish key
+  ui/finish-key.js      PI script: step editor + key recorder for the finish keys
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 rollup.config.mjs       bundles src/ to bin/plugin.js
