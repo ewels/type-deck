@@ -4,7 +4,10 @@
 
 ### Added
 
-- **Finish key.** An opt-in per-action setting that presses a key combo once the typing has finished, after a configurable delay (100 ms by default). Click _Record combo_ in the settings panel and press the keys you want, or type the combo in by hand. Saves building a Multi Action with a hand-calculated wait just to send a message with Return. ([#2](https://github.com/ewels/type-deck/issues/2))
+- **Finish keys.** An opt-in per-action setting that presses one or more key combos once the typing has finished. Saves building a Multi Action with a hand-calculated wait just to send a message with Return. ([#2](https://github.com/ewels/type-deck/issues/2))
+  - Add as many steps as you like. They run in order, each with its own _Record_ button, so a sequence like Tab, Tab, Return is a few clicks.
+  - Record a combo by pressing the keys, or type it in by hand for the few shortcuts the OS swallows before the settings panel sees them.
+  - A default delay (100 ms) is applied before each step, and any step can override it, for example to wait for a dialog to open before the next press.
 
 ### Fixed
 

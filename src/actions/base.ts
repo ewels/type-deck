@@ -285,6 +285,45 @@ export function parseKeyCombo(raw: unknown): KeyCombo | null {
   return { key, modifiers };
 }
 
+export type FinishKeyStep = { combo: KeyCombo; delayMs: number };
+
+/**
+ * Parse the stored finish-key list, one step per line. A line is a combo,
+ * optionally followed by that step's own delay in ms:
+ *
+ *     enter
+ *     meta+s 500
+ *     enter
+ *
+ * Lines without their own delay fall back to `defaultDelayMs`.
+ */
+export function parseFinishKeySteps(
+  raw: unknown,
+  defaultDelayMs: number,
+): FinishKeyStep[] {
+  const steps: FinishKeyStep[] = [];
+  for (const line of String(raw ?? "").split(/\r?\n/)) {
+    const tokens = line
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+    if (tokens.length === 0) continue;
+
+    let delayMs = defaultDelayMs;
+    // Only a trailing number *after* something else is a delay, so a bare
+    // digit key ("1") still reads as the key rather than as a delay.
+    const last = tokens[tokens.length - 1];
+    if (tokens.length > 1 && /^\d+$/.test(last)) {
+      tokens.pop();
+      delayMs = Number.parseInt(last, 10);
+    }
+
+    const combo = parseKeyCombo(tokens.join(""));
+    if (combo) steps.push({ combo, delayMs });
+  }
+  return steps;
+}
+
 /**
  * Result of picking the text to type for a single press.
  * `update` is merged into settings and persisted before typing starts, so an
@@ -367,36 +406,36 @@ export abstract class BaseTypeAction<
   }
 
   /**
-   * Tap the configured combo once the run has finished typing. Skipped when the
-   * run was aborted, or when the user aborts during the post-typing delay.
+   * Tap each configured combo in turn once the run has finished typing. Skipped
+   * when the run was aborted, including an abort during one of the delays.
    */
   private async pressFinishKey(settings: S): Promise<void> {
     if (!settings.finishKeyEnabled) return;
-    const combo = parseKeyCombo(settings.finishKeyCombo);
-    if (!combo) return;
-
-    const delayMs = toNumber(
-      settings.finishKeyDelayMs,
-      DEFAULTS.finishKeyDelayMs,
+    const steps = parseFinishKeySteps(
+      settings.finishKeyCombo,
+      toNumber(settings.finishKeyDelayMs, DEFAULTS.finishKeyDelayMs),
     );
-    if (delayMs > 0) await sleep(delayMs);
-    if (this.abortRequested) return;
 
-    // Same reason as the clipboard paste: keyboardDelay is 0, so there is no
-    // gap between the modifier press and the key tap and macOS drops the combo.
-    const needsGap = combo.modifiers.length > 0;
-    if (needsGap) libnut.setKeyboardDelay(PASTE_MODIFIER_DELAY_MS);
-    try {
-      libnut.keyTap(combo.key, combo.modifiers);
-    } catch (err) {
-      // An unrecognised key name throws from the native binding. The text is
-      // already typed, so log and carry on rather than failing the whole run.
-      streamDeck.logger.error(
-        `Could not press finish key combo "${settings.finishKeyCombo}"`,
-        err,
-      );
-    } finally {
-      if (needsGap) libnut.setKeyboardDelay(0);
+    for (const { combo, delayMs } of steps) {
+      if (delayMs > 0) await sleep(delayMs);
+      if (this.abortRequested) return;
+
+      // Same reason as the clipboard paste: keyboardDelay is 0, so there is no
+      // gap between the modifier press and the key tap and macOS drops it.
+      const needsGap = combo.modifiers.length > 0;
+      if (needsGap) libnut.setKeyboardDelay(PASTE_MODIFIER_DELAY_MS);
+      try {
+        libnut.keyTap(combo.key, combo.modifiers);
+      } catch (err) {
+        // An unrecognised key name throws from the native binding. The text is
+        // already typed, so log this step and carry on with the rest.
+        streamDeck.logger.error(
+          `Could not press finish key "${[...combo.modifiers, combo.key].join("+")}"`,
+          err,
+        );
+      } finally {
+        if (needsGap) libnut.setKeyboardDelay(0);
+      }
     }
   }
 

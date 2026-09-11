@@ -53,8 +53,9 @@
   }
 
   const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/;
+  const COMMIT_DEBOUNCE_MS = 400;
 
-  // Order matters: it is the canonical form the plugin stores and displays.
+  // Order matters: it is the canonical form the plugin stores.
   function modifiersOf(ev) {
     const mods = [];
     if (ev.ctrlKey) mods.push("control");
@@ -74,21 +75,76 @@
     return null;
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    const field = document.querySelector(
-      'sdpi-textfield[setting="finishKeyCombo"]',
-    );
-    const button = document.querySelector("[data-record-combo]");
-    const clear = document.querySelector("[data-clear-combo]");
-    if (!field || !button) return;
+  // One step per line: a combo, optionally followed by that step's own delay.
+  // Mirrors parseFinishKeySteps() in src/actions/base.ts.
+  function parseLine(line) {
+    const tokens = line
+      .trim()
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+    if (tokens.length === 0) return null;
+    let delay = "";
+    const last = tokens[tokens.length - 1];
+    if (tokens.length > 1 && /^\d+$/.test(last)) {
+      tokens.pop();
+      delay = last;
+    }
+    return { combo: tokens.join(""), delay };
+  }
 
-    const IDLE_LABEL = button.textContent;
-    let recording = false;
+  // The visible rows are plain HTML. They serialise into a hidden
+  // sdpi-textarea, which is what actually persists the setting.
+  let store = null;
+  let rowsEl = null;
+  let enabled = false;
+  let ready = false;
+  let pending = null;
+  let lastSerialized = null;
+  let stopRecording = null;
+  let commitTimer = null;
+
+  function serialize() {
+    const lines = [];
+    for (const row of rowsEl.children) {
+      const combo = row.querySelector(".step-combo").value.trim();
+      if (!combo) continue;
+      const delay = row.querySelector(".step-delay").value.trim();
+      lines.push(/^\d+$/.test(delay) ? `${combo} ${delay}` : combo);
+    }
+    return lines.join("\n");
+  }
+
+  function commit() {
+    clearTimeout(commitTimer);
+    const text = serialize();
+    if (text === lastSerialized) return;
+    lastSerialized = text;
+    store.value = text;
+  }
+
+  const commitSoon = () => {
+    clearTimeout(commitTimer);
+    commitTimer = setTimeout(commit, COMMIT_DEBOUNCE_MS);
+  };
+
+  function applyEnabled() {
+    for (const el of document.querySelectorAll("[data-finish-key-toggle]")) {
+      el.disabled = !enabled;
+    }
+    if (!rowsEl) return;
+    for (const el of rowsEl.querySelectorAll("input, button")) {
+      el.disabled = !enabled;
+    }
+    if (!enabled && stopRecording) stopRecording();
+  }
+
+  function record(button, input) {
+    if (stopRecording) stopRecording();
+    const idleLabel = button.textContent;
 
     const stop = () => {
-      if (!recording) return;
-      recording = false;
-      button.textContent = IDLE_LABEL;
+      stopRecording = null;
+      button.textContent = idleLabel;
       button.classList.remove("recording");
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
@@ -99,9 +155,7 @@
     // visible before the final key lands.
     const preview = (ev) => {
       const mods = modifiersOf(ev);
-      button.textContent = mods.length
-        ? `${mods.join("+")}+...`
-        : "Press keys...";
+      button.textContent = mods.length ? `${mods.join("+")}+` : "Press keys";
     };
 
     function onKeyDown(ev) {
@@ -116,8 +170,9 @@
         preview(ev);
         return;
       }
-      field.value = [...modifiersOf(ev), key].join("+");
+      input.value = [...modifiersOf(ev), key].join("+");
       stop();
+      commit();
     }
 
     function onKeyUp(ev) {
@@ -126,41 +181,119 @@
       if (MODIFIER_CODES.test(ev.code)) preview(ev);
     }
 
-    button.addEventListener("click", (ev) => {
+    stopRecording = stop;
+    button.textContent = "Press keys";
+    button.classList.add("recording");
+    button.blur();
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", stop);
+  }
+
+  function makeRow(step) {
+    const row = document.createElement("div");
+    row.className = "step-row";
+
+    const combo = document.createElement("input");
+    combo.type = "text";
+    combo.className = "step-combo";
+    combo.placeholder = "enter";
+    combo.value = step.combo;
+    combo.addEventListener("input", commitSoon);
+    combo.addEventListener("change", commit);
+
+    const recordButton = document.createElement("button");
+    recordButton.type = "button";
+    recordButton.className = "step-record";
+    recordButton.textContent = "Record";
+    recordButton.addEventListener("click", (ev) => {
       ev.preventDefault();
-      if (recording) {
-        stop();
-        return;
-      }
-      recording = true;
-      button.textContent = "Press keys...";
-      button.classList.add("recording");
-      button.blur();
-      window.addEventListener("keydown", onKeyDown, true);
-      window.addEventListener("keyup", onKeyUp, true);
-      window.addEventListener("blur", stop);
+      record(recordButton, combo);
     });
 
-    clear?.addEventListener("click", (ev) => {
+    const delay = document.createElement("input");
+    delay.type = "text";
+    delay.className = "step-delay";
+    delay.inputMode = "numeric";
+    delay.placeholder = "ms";
+    delay.title = "Delay before this step. Leave blank for the default.";
+    delay.value = step.delay;
+    delay.addEventListener("input", commitSoon);
+    delay.addEventListener("change", commit);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "step-remove";
+    remove.textContent = "×";
+    remove.title = "Remove this step";
+    remove.addEventListener("click", (ev) => {
       ev.preventDefault();
-      stop();
-      field.value = "";
+      row.remove();
+      if (rowsEl.children.length === 0) {
+        rowsEl.appendChild(makeRow({ combo: "", delay: "" }));
+      }
+      applyEnabled();
+      commit();
     });
+
+    row.append(combo, recordButton, delay, remove);
+    return row;
+  }
+
+  function render(text) {
+    if (stopRecording) stopRecording();
+    rowsEl.textContent = "";
+    const steps = String(text ?? "")
+      .split(/\r?\n/)
+      .map(parseLine)
+      .filter((step) => step !== null);
+    if (steps.length === 0) steps.push({ combo: "", delay: "" });
+    for (const step of steps) rowsEl.appendChild(makeRow(step));
+    applyEnabled();
+  }
+
+  // Subscribe at module scope: sdpi-components broadcasts the saved settings
+  // once, and a listener registered after that broadcast never hears it.
+  SDPIComponents.useSettings("finishKeyCombo", (value) => {
+    const text = typeof value === "string" ? value : "";
+    // Ignore the echo of our own write, which would rebuild the rows under the
+    // user and lose the caret mid-edit.
+    if (text === lastSerialized) return;
+    lastSerialized = text;
+    if (!ready) {
+      pending = text;
+      return;
+    }
+    render(text);
   });
 
-  // Grey out the combo controls until the feature is switched on.
-  const applyEnabled = (enabled) => {
-    for (const el of document.querySelectorAll("[data-finish-key-toggle]")) {
-      el.disabled = !enabled;
-    }
-  };
-
-  SDPIComponents.useSettings("finishKeyEnabled", applyEnabled);
+  SDPIComponents.useSettings("finishKeyEnabled", (value) => {
+    enabled = !!value;
+    applyEnabled();
+  });
 
   document.addEventListener("DOMContentLoaded", () => {
+    store = document.querySelector('sdpi-textarea[setting="finishKeyCombo"]');
+    rowsEl = document.querySelector("[data-finish-key-rows]");
+    if (!store || !rowsEl) return;
+
+    ready = true;
+    render(pending);
+
+    document
+      .querySelector("[data-add-step]")
+      ?.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        rowsEl.appendChild(makeRow({ combo: "", delay: "" }));
+        applyEnabled();
+      });
+
     const cb = document.querySelector(
       'sdpi-checkbox[setting="finishKeyEnabled"]',
     );
-    cb?.addEventListener("valuechange", () => applyEnabled(cb.value));
+    cb?.addEventListener("valuechange", () => {
+      enabled = !!cb.value;
+      applyEnabled();
+    });
   });
 })();

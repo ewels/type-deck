@@ -28,11 +28,10 @@
         letter-spacing: 0.04em;
         color: var(--color-content-secondary, #999);
       }
-      .buttons {
-        display: flex;
-        gap: 6px;
+      .hidden-store {
+        display: none;
       }
-      .buttons button {
+      button {
         font-family: inherit;
         font-size: 11px;
         padding: 4px 10px;
@@ -42,16 +41,52 @@
         color: var(--color-content-primary, #d8d8d8);
         cursor: pointer;
       }
-      .buttons button:hover:not(:disabled) {
+      button:hover:not(:disabled) {
         background: var(--color-surface-hover, #4d4d4d);
       }
-      .buttons button:disabled {
+      button:disabled {
         opacity: 0.4;
         cursor: default;
       }
-      .buttons button.recording {
+      button.recording {
         border-color: var(--color-info, #4b9cff);
         color: var(--color-info, #4b9cff);
+      }
+      [data-finish-key-rows] {
+        flex: 1 1 auto;
+        width: 100%;
+      }
+      .step-row {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 4px;
+      }
+      .step-row input {
+        font-family: inherit;
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        background: var(--color-surface, #3d3d3d);
+        color: var(--color-content-primary, #d8d8d8);
+        min-width: 0;
+      }
+      .step-row input:disabled {
+        opacity: 0.4;
+      }
+      .step-combo {
+        flex: 1 1 auto;
+      }
+      .step-delay {
+        flex: 0 0 52px;
+        width: 52px;
+      }
+      .step-record {
+        flex: 0 0 auto;
+      }
+      .step-remove {
+        flex: 0 0 auto;
+        padding: 4px 8px;
       }
     </style>
   </head>
@@ -95,40 +130,41 @@
       ></sdpi-textfield>
     </sdpi-item>
 
-    <div class="section">Finish key</div>
-    <sdpi-item label="Finish key">
+    <div class="section">Finish keys</div>
+    <sdpi-item label="Finish keys">
       <sdpi-checkbox
         setting="finishKeyEnabled"
-        label="Press a key combo once typing has finished"
+        label="Press key combos once typing has finished"
       ></sdpi-checkbox>
     </sdpi-item>
-    <sdpi-item label="Key combo">
-      <sdpi-textfield
-        data-finish-key-toggle
-        setting="finishKeyCombo"
-        placeholder="enter"
-      ></sdpi-textfield>
+
+    <!--
+      The visible step rows are built by finish-key.js and serialised into this
+      textarea, which is what actually persists the setting. Hidden rather than
+      removed so the rows never need their own persistence.
+    -->
+    <div class="hidden-store">
+      <sdpi-textarea setting="finishKeyCombo"></sdpi-textarea>
+    </div>
+
+    <sdpi-item label="Steps">
+      <div data-finish-key-rows></div>
     </sdpi-item>
-    <sdpi-item label="Record">
-      <div class="buttons">
-        <button type="button" data-finish-key-toggle data-record-combo>
-          Record combo
-        </button>
-        <button type="button" data-finish-key-toggle data-clear-combo>
-          Clear
-        </button>
-      </div>
+    <sdpi-item label="">
+      <button type="button" data-finish-key-toggle data-add-step>
+        Add step
+      </button>
     </sdpi-item>
     <small class="help">
-      Click "Record combo" and press the keys you want, for example Return or
-      Cmd+Shift+Return. A few system shortcuts are swallowed by the OS and
-      cannot be recorded: those can be typed into the field by hand, as
-      modifiers plus a key name joined with <code>+</code> (for example
+      Each step is one key press, run in order. Click "Record" on a step and
+      press the keys you want, or type the combo in by hand as modifiers plus a
+      key name joined with <code>+</code> (for example
       <code>meta+shift+enter</code>). Modifier names are <code>control</code>,
       <code>alt</code>, <code>shift</code> and <code>meta</code> (Command on
-      macOS, Windows key elsewhere).
+      macOS, Windows key elsewhere). A few system shortcuts are swallowed by the
+      OS and cannot be recorded, so type those in.
     </small>
-    <sdpi-item label="Delay before (ms)">
+    <sdpi-item label="Default delay (ms)">
       <sdpi-textfield
         data-finish-key-toggle
         setting="finishKeyDelayMs"
@@ -139,7 +175,8 @@
       ></sdpi-textfield>
     </sdpi-item>
     <small class="help">
-      How long to wait after the last character before pressing the combo.
+      How long to wait before each step. Give a step its own number to override
+      it, for example to wait for a dialog to open before the next press.
     </small>
 
     <div class="section">Instant type</div>
