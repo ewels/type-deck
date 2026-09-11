@@ -45,14 +45,18 @@ The version lives in `com.ewels.type-deck.sdPlugin/manifest.json` as a four-part
 To cut a release:
 
 ```sh
-# 1. Bump manifest "Version" to "X.Y.Z.0" on a clean tree, then push.
-git commit -m "Bump version to X.Y.Z" com.ewels.type-deck.sdPlugin/manifest.json
+# 1. Move the CHANGELOG.md "Unreleased" entries under a new "## [X.Y.Z] - YYYY-MM-DD"
+#    heading, add the compare link at the bottom, and bump manifest "Version" to
+#    "X.Y.Z.0" on a clean tree, then push.
+git commit -m "Bump version to X.Y.Z" CHANGELOG.md com.ewels.type-deck.sdPlugin/manifest.json
 git push origin main
 # 2. Create the release. gh creates the tag on the remote at HEAD; no local tag needed.
 gh release create vX.Y.Z --title "vX.Y.Z — <headline>" --notes "..."
 ```
 
 **Do not `streamdeck pack` locally and attach the asset by hand.** `.github/workflows/release.yml` fires on `release: published`, runs `npm ci && npm run build`, stages a tiny `package.json` inside `com.ewels.type-deck.sdPlugin/` so `@nut-tree-fork/libnut` is installed alongside `bin/plugin.js` (all three `libnut-{darwin,win32,linux}` `.node` files), packs the plugin, and uploads `com.ewels.type-deck.streamDeckPlugin` to the release with `--clobber`. A locally-packed asset would only carry the host platform's libnut binary.
+
+`CHANGELOG.md` is the running record of user-visible changes (Keep a Changelog format, newest first). Add to its `## [Unreleased]` section as changes land, not at release time. The GitHub release notes are written separately and are chattier; the changelog entries are the terse version. The no-em-dashes convention applies to it.
 
 Release-notes style mirrors past releases: title is `vX.Y.Z — <headline>`, body has `## Highlights` and `## Install` sections. Check `gh release view vX.Y.Z` on a previous release for the exact template.
 
