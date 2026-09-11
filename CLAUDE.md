@@ -114,6 +114,10 @@ Timing/jitter/typo settings are all ignored when `instantType` is on; the PI HTM
 
 The plugin calls into [`@nut-tree-fork/libnut`](https://www.npmjs.com/package/@nut-tree-fork/libnut) directly (the raw native binding under nut-js) via its internal subpath `dist/import_libnut.js` — a type shim lives at `src/types/libnut.d.ts`. We use exactly three libnut functions: `typeString`, `keyTap`, `setKeyboardDelay`. Clipboard reads use a small `pbpaste` / PowerShell `Get-Clipboard` subprocess in `readClipboard()`; no clipboard dependency.
 
+`libnut.typeString` decodes UTF-8 into code points correctly, but on Windows and Linux it then truncates each code point to a single byte before mapping it to a physical key (`toggleUniKey((char)n, ...)` in libnut-core's `src/win32/keypress.c` / `src/linux/keypress.c`). Anything above U+007F is therefore typed as the wrong character or not at all, which is [issue #1](https://github.com/ewels/type-deck/issues/1). macOS passes the full code point to `CGEventKeyboardSetUnicodeString` and types any character verbatim.
+
+So the regular typing loop checks each character with `isNativelyTypeable()` and routes the ones libnut can't handle through `pasteText()` (clipboard write plus Cmd/Ctrl+V, the same helper the Instant type path uses). Consecutive untypeable characters are batched into a single paste, so a wholly non-Latin string is one paste rather than one per character. The original clipboard is read once, lazily, on the first paste of a run and restored in a `finally` when the run ends (an aborted run included). Where no clipboard is available (Linux) the loop falls back to `typeString` and logs a warning.
+
 The libnut package transitively installs `libnut-darwin`, `libnut-win32` and `libnut-linux` as regular deps — every install gets all three platform `.node` files, so packaging is platform-agnostic.
 
 ### One critical native-blocking workaround
