@@ -73,6 +73,38 @@ function writeClipboard(text: string): Promise<boolean> {
   });
 }
 
+// Wait for the target app to consume a paste before restoring the clipboard.
+const PASTE_SETTLE_MS = 150;
+// libnut's keyboardDelay is 0 (set at module load), which is fine for typing,
+// but with no gap between the modifier press and the key tap macOS doesn't
+// register Cmd+V. A small delay is restored just around the paste.
+const PASTE_MODIFIER_DELAY_MS = 40;
+
+// libnut's typeString decodes UTF-8 correctly but then truncates every code
+// point to a single byte before mapping it to a physical key on Windows and
+// Linux, so anything above U+007F comes out as the wrong character or not at
+// all. macOS hands the full code point to the OS and types it verbatim.
+const NATIVE_UNICODE_TYPING = IS_MAC;
+
+function isNativelyTypeable(char: string): boolean {
+  return NATIVE_UNICODE_TYPING || (char.codePointAt(0) ?? 0) <= 0x7f;
+}
+
+/** Put text on the clipboard and send the paste shortcut. */
+async function pasteText(text: string): Promise<boolean> {
+  if (!(await writeClipboard(text))) return false;
+  // libnut uses "meta" for the macOS Command key; "control" on Windows.
+  const modifier = IS_MAC ? "meta" : "control";
+  libnut.setKeyboardDelay(PASTE_MODIFIER_DELAY_MS);
+  try {
+    libnut.keyTap("v", [modifier]);
+  } finally {
+    libnut.setKeyboardDelay(0);
+  }
+  await sleep(PASTE_SETTLE_MS);
+  return true;
+}
+
 export type BaseTypingSettings = {
   text?: string;
   instantType?: boolean;
@@ -318,20 +350,7 @@ export abstract class BaseTypeAction<
 
       if (settings.instantType) {
         const original = await originalClipboard;
-        if (await writeClipboard(text)) {
-          // libnut uses "meta" for the macOS Command key; "control" on Windows.
-          const modifier = IS_MAC ? "meta" : "control";
-          // libnut's keyboardDelay is 0 (set at module load) — fine for typing,
-          // but with no gap between the modifier press and the key tap macOS
-          // doesn't register Cmd+V. Restore a small delay just for the paste.
-          libnut.setKeyboardDelay(40);
-          try {
-            libnut.keyTap("v", [modifier]);
-          } finally {
-            libnut.setKeyboardDelay(0);
-          }
-          // Let the target app consume the paste before we restore the clipboard.
-          await sleep(150);
+        if (await pasteText(text)) {
           if (original) await writeClipboard(original);
         } else {
           // writeClipboard unavailable (Linux) or failed — fall back to typing.
@@ -368,44 +387,80 @@ export abstract class BaseTypeAction<
         }
       };
 
-      for (const char of text) {
-        if (this.abortRequested) {
-          flush();
-          return;
+      // Characters libnut can't type on this platform are pasted instead. The
+      // clipboard is read once, lazily, and restored when the run finishes
+      // (including a run that was aborted part way through).
+      let savedClipboard: string | null = null;
+      let clipboardUsable = true;
+      const pasteChunk = async (chunk: string): Promise<void> => {
+        if (clipboardUsable) {
+          if (savedClipboard === null) savedClipboard = await readClipboard();
+          if (await pasteText(chunk)) return;
+          clipboardUsable = false;
+          streamDeck.logger.warn(
+            "Clipboard unavailable: characters outside ASCII may be typed incorrectly",
+          );
         }
-        if (char === "\r") continue;
+        libnut.typeString(chunk);
+      };
 
-        if (char === "\n") {
-          flush();
-          libnut.keyTap("enter", []);
-          await delay(charDelay + paragraphDelay);
-          continue;
-        }
-
-        if (typoChance > 0 && Math.random() < typoChance) {
-          const wrong = adjacentKey(char);
-          if (wrong) {
+      const chars = Array.from(text);
+      try {
+        for (let i = 0; i < chars.length; i++) {
+          const char = chars[i];
+          if (this.abortRequested) {
             flush();
-            libnut.typeString(wrong);
-            await delay(DEFAULTS.typoCorrectionMs);
-            if (this.abortRequested) return;
-            libnut.keyTap("backspace", []);
-            await delay(charDelay * 2);
-            if (this.abortRequested) return;
+            return;
+          }
+          if (char === "\r") continue;
+
+          if (char === "\n") {
+            flush();
+            libnut.keyTap("enter", []);
+            await delay(charDelay + paragraphDelay);
+            continue;
+          }
+
+          if (!isNativelyTypeable(char)) {
+            // Take the whole run of them so a non-Latin string is one paste.
+            flush();
+            let chunk = char;
+            while (i + 1 < chars.length && !isNativelyTypeable(chars[i + 1])) {
+              i += 1;
+              chunk += chars[i];
+            }
+            await pasteChunk(chunk);
+            await delay(charDelay);
+            continue;
+          }
+
+          if (typoChance > 0 && Math.random() < typoChance) {
+            const wrong = adjacentKey(char);
+            if (wrong) {
+              flush();
+              libnut.typeString(wrong);
+              await delay(DEFAULTS.typoCorrectionMs);
+              if (this.abortRequested) return;
+              libnut.keyTap("backspace", []);
+              await delay(charDelay * 2);
+              if (this.abortRequested) return;
+            }
+          }
+
+          buffer += char;
+          if (charDelay > 0) {
+            flush();
+            await delay(charDelay);
+          }
+          if (char === " ") {
+            flush();
+            await delay(wordDelay);
           }
         }
-
-        buffer += char;
-        if (charDelay > 0) {
-          flush();
-          await delay(charDelay);
-        }
-        if (char === " ") {
-          flush();
-          await delay(wordDelay);
-        }
+        flush();
+      } finally {
+        if (savedClipboard) await writeClipboard(savedClipboard);
       }
-      flush();
     } catch (err) {
       streamDeck.logger.error("Typing run failed", err);
       await action.showAlert();

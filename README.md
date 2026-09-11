@@ -28,6 +28,7 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
   - `{clipboard}` → current clipboard contents
   - `{counter}` → number of presses (persisted per action)
   - Use `{{` and `}}` for literal braces.
+- **Unicode symbols.** Characters outside ASCII (`♯`, `é`, emoji) can't be sent as plain keystrokes on Windows, so they are inserted with a quick clipboard paste instead. Your clipboard contents are put back afterwards.
 - **Cancel or queue.** Pressing the key while it's already typing either aborts the current run (default) or queues another run to start immediately after, depending on the per-action setting.
 
 <p align="center">
@@ -37,6 +38,8 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
 ## Installation
 
 Download the latest `com.ewels.type-deck.streamDeckPlugin` from the [Releases](https://github.com/ewels/type-deck/releases) page and double-click it. Stream Deck will install the plugin.
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for what changed in each version.
 
 <!-- prettier-ignore-start -->
 > [!NOTE]
