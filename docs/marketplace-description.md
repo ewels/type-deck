@@ -2,17 +2,18 @@
 
 ## Short description
 
-Type Deck types preset text into the focused app when you press a key. Optional human-feel timing, randomised delays and occasional adjacent-key typos make the output look hand-typed. Three actions: a single string, a cycling list, or a random pick.
+Type Deck types preset text into the focused app when you press a key. Optional human-feel timing, randomised delays and occasional adjacent-key typos make the output look hand-typed. Four actions: a single string, a cycling list, a random pick, or a Stream Deck + dial you rotate to choose.
 
 ## Full description
 
-Type Deck types preset text into the focused app when you press a key. Optional human-feel timing, randomised delays and occasional adjacent-key typos make the output look hand-typed. Three actions: a single string, a cycling list, or a random pick.
+Type Deck types preset text into the focused app when you press a key. Optional human-feel timing, randomised delays and occasional adjacent-key typos make the output look hand-typed. Four actions: a single string, a cycling list, a random pick, or a Stream Deck + dial you rotate to choose.
 
 **Actions**
 
 - **Type text** — types the configured text on every press. Optional long-press for a second, alternative string.
 - **Cycle next** — each non-empty line of the text field is one entry; each press types the next line, looping back to the start.
 - **Random pick** — same line-per-entry format as Cycle next, but each press picks one at random.
+- **Dial pick** (Stream Deck + only): rotate the dial to move through the list, press it to type the entry shown on the touchscreen, which displays the position and a preview of the text.
 
 **Human-feel typing**
 

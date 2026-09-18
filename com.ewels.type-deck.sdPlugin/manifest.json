@@ -47,6 +47,27 @@
           "TitleAlignment": "middle"
         }
       ]
+    },
+    {
+      "Name": "Dial pick",
+      "UUID": "com.ewels.type-deck.dial",
+      "Icon": "imgs/actions/dial/icon",
+      "Tooltip": "Rotate a dial to pick a line, press to type it. Stream Deck + only.",
+      "PropertyInspectorPath": "ui/dial.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "Icon": "imgs/actions/dial/encoder",
+        "layout": "layouts/dial.json",
+        "TriggerDescription": {
+          "Rotate": "Select text",
+          "Push": "Type selected text"
+        }
+      },
+      "States": [
+        {
+          "Image": "imgs/actions/dial/key"
+        }
+      ]
     }
   ],
   "Category": "Type Deck",

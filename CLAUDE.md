@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Stream Deck plugin ("Type Deck") that simulates a human typing preset text into the focused application when a Stream Deck key is pressed. Plugin UUID: `com.ewels.type-deck`. Three actions:
+A Stream Deck plugin ("Type Deck") that simulates a human typing preset text into the focused application when a Stream Deck key is pressed. Plugin UUID: `com.ewels.type-deck`. Four actions:
 
 - `com.ewels.type-deck.type` ("Type text") — types `settings.text` verbatim. Supports long-press for an alternative text.
 - `com.ewels.type-deck.cycle` ("Cycle next") — text is one entry per line; each press types the next line, looping. Persists `cycleIndex` in settings.
 - `com.ewels.type-deck.random` ("Random pick") — text is one entry per line; each press types a random line.
+- `com.ewels.type-deck.dial` ("Dial pick") — Stream Deck + encoder. Rotate selects a line, press types it. Persists `dialIndex` in settings.
 
 Every action also supports `instantType` (paste-via-clipboard); see [Instant type](#instant-type) below.
 
@@ -16,6 +17,7 @@ Every action also supports `instantType` (paste-via-clipboard); see [Instant typ
 
 ```sh
 npm run build         # one-off rollup build → com.ewels.type-deck.sdPlugin/bin/plugin.js
+npm test              # dial action checks (needs a desktop session; run build first)
 npm run watch         # rebuild on save, then restart the plugin in Stream Deck via @elgato/cli
 npm run lint          # biome lint
 npm run lint:fix      # biome lint --write
@@ -66,20 +68,24 @@ Release-notes style mirrors past releases: title is `vX.Y.Z — <headline>`, bod
 
 ```
 src/
-  plugin.ts             bootstrap: registers all three actions + connect()
+  plugin.ts             bootstrap: registers all four actions + connect()
   actions/base.ts       BaseTypeAction — shared state, lifecycle, typing loop
   actions/type.ts       TypeAction (long-press)
   actions/cycle.ts      CycleAction (lines, advancing index)
   actions/random.ts     RandomPickAction (lines, random pick)
+  actions/dial.ts       DialPickAction (Stream Deck + encoder)
 com.ewels.type-deck.sdPlugin/
   manifest.json         plugin manifest (validated by Elgato JSON schema)
   ui/type.html          property inspector (sdpi-components v4 over CDN)
   ui/cycle.html         PI for Cycle
   ui/random.html        PI for Random pick
+  ui/dial.html          PI for Dial pick
+  layouts/dial.json     touchscreen layout for Dial pick
   ui/instant-toggle.js  PI script: greys out timing fields when Instant type is on
   ui/finish-key.js      PI script: step editor + key recorder for the finish keys
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
+test/dial.mjs           dial checks over a fake Stream Deck websocket (`npm test`)
 rollup.config.mjs       bundles src/ to bin/plugin.js
                         `@nut-tree-fork/*` packages are marked external —
                         loaded from node_modules at runtime, not bundled
@@ -103,6 +109,39 @@ Per-action persisted state (counter, cycleIndex) is stored in the action's setti
 3. **Otherwise** — type immediately from `onKeyDown` using `pickText`.
 
 `pickText`'s `update` is persisted **before typing starts**, so an aborted run still advances the cycle. Variables (`{date}`, `{time}`, `{clipboard}`, `{counter}`) are always expanded; `{counter}` only writes to settings when actually referenced in the text.
+
+### The dial action
+
+`DialPickAction` (`src/actions/dial.ts`) is the only action declaring
+`"Controllers": ["Encoder"]`, so it can only be dropped onto a Stream Deck +
+dial. It extends `BaseTypeAction` like the rest and reuses the whole typing
+path; what it adds is rotation, selection state and the touchscreen.
+
+- `onDialRotate` moves the selection by `ev.payload.ticks` (signed, and more
+  than 1 for a fast spin), wrapping at both ends, then persists `dialIndex` and
+  redraws.
+- `onDialDown` types the current selection. It goes through
+  `handleRepeatPress()` first, so cancel/queue behaves exactly as it does for a
+  key.
+- Rotation maths runs off an in-memory `Map<action.id, index>`, not off
+  `payload.settings`. A fast spin delivers several `dialRotate` events before
+  Stream Deck echoes back the settings written for the first one, so reading the
+  settings each time would drop ticks. Settings are still written every rotate
+  (that is what survives a restart, and what `pickText` reads on press, by which
+  point the spin has long settled). `onWillDisappear` drops the map entry.
+- The touchscreen is drawn through `updateDisplay()`, a hook added to
+  `BaseTypeAction` so that `onWillAppear` / `onDidReceiveSettings` refresh the
+  right thing per controller. The base implementation sets a title preview (what
+  keys have always done); `DialPickAction` overrides it to `setFeedback` the
+  `count` and `preview` items of `layouts/dial.json`.
+- Long lines are cut by that layout's `"text-overflow": "ellipsis"`, so there is
+  no truncation logic in the plugin.
+
+`npm test` (`test/dial.mjs`) spawns the built plugin against a fake Stream Deck
+websocket and asserts on the commands it sends back, which covers the wrap,
+clamping, per-dial isolation and keypad-regression cases without a Stream Deck +.
+It needs a desktop session because libnut loads at startup, so it is not in CI.
+No case in it has any text to type.
 
 ### Instant type
 

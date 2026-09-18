@@ -1,7 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import streamDeck, {
+  type DialAction,
   type DidReceiveSettingsEvent,
+  type KeyAction,
   type KeyDownEvent,
   type KeyUpEvent,
   SingletonAction,
@@ -321,6 +323,14 @@ export type PickResult<S> = {
   update?: Partial<S>;
 } | null;
 
+/**
+ * Anything a typing run can be driven from: a key, or a Stream Deck + dial.
+ * Only the shared `Action` members (settings, showAlert, setTitle) are used.
+ */
+export type TypeActionTarget<S extends BaseTypingSettings> =
+  | DialAction<S>
+  | KeyAction<S>;
+
 export abstract class BaseTypeAction<
   S extends BaseTypingSettings,
 > extends SingletonAction<S> {
@@ -343,25 +353,44 @@ export abstract class BaseTypeAction<
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressFired = false;
 
+  /**
+   * Refresh whatever the hardware shows for this action. Keys get a preview of
+   * the text as their title; DialPickAction overrides this to draw the
+   * touchscreen layout instead.
+   */
+  protected updateDisplay(
+    action: TypeActionTarget<S>,
+    settings: S,
+  ): Promise<void> {
+    return action.setTitle(previewTitle(settings.text));
+  }
+
   override onWillAppear(ev: WillAppearEvent<S>): Promise<void> {
-    return ev.action.setTitle(previewTitle(ev.payload.settings.text));
+    return this.updateDisplay(ev.action, ev.payload.settings);
   }
 
   override onDidReceiveSettings(ev: DidReceiveSettingsEvent<S>): Promise<void> {
-    return ev.action.setTitle(previewTitle(ev.payload.settings.text));
+    return this.updateDisplay(ev.action, ev.payload.settings);
+  }
+
+  /**
+   * A press that landed while a run is already in flight: cancel that run, or
+   * queue another after it. Returns true when the press was consumed.
+   */
+  protected handleRepeatPress(settings: S): boolean {
+    if (!this.isTyping) return false;
+    if (settings.cancelOnSecondPress) {
+      this.abortRequested = true;
+    } else {
+      this.queuedRun = true;
+    }
+    return true;
   }
 
   override async onKeyDown(ev: KeyDownEvent<S>): Promise<void> {
     const { settings } = ev.payload;
 
-    if (this.isTyping) {
-      if (settings.cancelOnSecondPress) {
-        this.abortRequested = true;
-      } else {
-        this.queuedRun = true;
-      }
-      return;
-    }
+    if (this.handleRepeatPress(settings)) return;
 
     const longText = this.pickLongPressText(settings);
     if (longText !== null) {
@@ -427,8 +456,8 @@ export abstract class BaseTypeAction<
     }
   }
 
-  private async runTyping(
-    action: KeyDownEvent<S>["action"],
+  protected async runTyping(
+    action: TypeActionTarget<S>,
     settings: S,
     longPressText: string | null,
   ): Promise<void> {
