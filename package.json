@@ -9,7 +9,8 @@
     "format:check": "prettier --check . && biome format .",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "test": "node test/dial.mjs"
   },
   "type": "module",
   "devDependencies": {
@@ -24,7 +25,8 @@
     "prettier": "3.9.6",
     "rollup": "^4.63.1",
     "tslib": "^2.8.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "ws": "^8.20.1"
   },
   "dependencies": {
     "@elgato/streamdeck": "^2.1.2",

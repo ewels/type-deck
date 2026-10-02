@@ -11,11 +11,12 @@ Useful for things like inserting boilerplate snippets, demo scripts, prepared an
 
 ## Actions
 
-| Action          | What it does                                                                                                   |
-| --------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Type text**   | Types the configured text every press. (Optional: **long press** types a second, different string)             |
-| **Cycle next**  | Each non-empty line of the text field is one entry. Each press types the next line, looping back to the start. |
-| **Random pick** | Same line-per-entry format as Cycle next, but each press picks one at random.                                  |
+| Action          | What it does                                                                                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Type text**   | Types the configured text every press. (Optional: **long press** types a second, different string)                               |
+| **Cycle next**  | Each non-empty line of the text field is one entry. Each press types the next line, looping back to the start.                   |
+| **Random pick** | Same line-per-entry format as Cycle next, but each press picks one at random.                                                    |
+| **Dial pick**   | Stream Deck + only. Rotate the dial to pick a line, press the dial to type it. The touchscreen shows the position and a preview. |
 
 ## Features
 

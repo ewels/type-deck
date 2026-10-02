@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Dial pick.** A new action for the dials on Stream Deck +. Rotate to move through the list (wrapping at both ends), press to type the entry shown on the touchscreen, which displays the position and a preview of the selected text. Same line-per-entry format and same typing options as the existing actions. ([#6](https://github.com/ewels/type-deck/issues/6))
+
 ## [0.3.0] - 2026-09-12
 
 ### Added

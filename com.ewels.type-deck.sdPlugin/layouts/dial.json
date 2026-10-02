@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+  "id": "type-deck-dial",
+  "items": [
+    {
+      "key": "count",
+      "type": "text",
+      "rect": [8, 6, 184, 18],
+      "alignment": "center",
+      "color": "#969696",
+      "font": { "size": 13, "weight": 600 },
+      "text-overflow": "ellipsis",
+      "value": ""
+    },
+    {
+      "key": "preview",
+      "type": "text",
+      "rect": [8, 30, 184, 60],
+      "alignment": "center",
+      "color": "#ffffff",
+      "font": { "size": 17, "weight": 500 },
+      "text-overflow": "ellipsis",
+      "value": ""
+    }
+  ]
+}

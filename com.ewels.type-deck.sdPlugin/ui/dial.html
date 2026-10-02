@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Type Deck - Dial Settings</title>
+    <meta charset="utf-8" />
+    <script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+    <script src="instant-toggle.js"></script>
+    <script src="finish-key.js"></script>
+    <style>
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
+      .help {
+        display: block;
+        margin: 2px 0 8px;
+        color: var(--color-content-secondary, #999);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .section {
+        margin-top: 14px;
+        padding-top: 6px;
+        border-top: 1px solid var(--color-border, #444);
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-content-secondary, #999);
+      }
+      .hidden-store {
+        display: none;
+      }
+      button {
+        font-family: inherit;
+        font-size: 11px;
+        padding: 4px 10px;
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        background: var(--color-surface, #3d3d3d);
+        color: var(--color-content-primary, #d8d8d8);
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        background: var(--color-surface-hover, #4d4d4d);
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      button.recording {
+        border-color: var(--color-info, #4b9cff);
+        color: var(--color-info, #4b9cff);
+      }
+      [data-finish-key-rows] {
+        flex: 1 1 auto;
+        width: 100%;
+      }
+      .step-row {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 4px;
+      }
+      .step-row input {
+        font-family: inherit;
+        font-size: 11px;
+        padding: 4px 6px;
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        background: var(--color-surface, #3d3d3d);
+        color: var(--color-content-primary, #d8d8d8);
+        min-width: 0;
+      }
+      .step-row input.invalid {
+        border-color: #d64b4b;
+      }
+      /* Fixed, and no shrinking: the last row carries the add button too, and
+         the boxes should still line up with the rows above it. */
+      .step-combo {
+        flex: 0 0 130px;
+        width: 130px;
+      }
+      .step-record {
+        flex: 0 0 auto;
+      }
+      .step-add,
+      .step-remove {
+        flex: 0 0 auto;
+        padding: 4px 8px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="section">Lines</div>
+    <sdpi-item label="Lines">
+      <sdpi-textarea
+        setting="text"
+        placeholder="One entry per line..."
+        rows="6"
+      ></sdpi-textarea>
+    </sdpi-item>
+    <small class="help">
+      Each non-empty line is one selectable entry. Rotate the dial to move
+      through the list (it wraps around at both ends) and press the dial to type
+      the entry shown on the touchscreen. Template variables:
+      <code>{date}</code> = YYYY-MM-DD, <code>{time}</code> = HH:MM:SS,
+      <code>{clipboard}</code> = current clipboard text,
+      <code>{counter}</code> = press count. Use <code>{{</code> and
+      <code>}}</code> for literal braces.
+    </small>
+
+    <div class="section">Finish keys</div>
+    <!--
+      The visible step rows are built by finish-key.js and serialised into this
+      textarea, which is what actually persists the setting. Hidden rather than
+      removed so the rows never need their own persistence.
+    -->
+    <div class="hidden-store">
+      <sdpi-textarea setting="finishKeyCombo"></sdpi-textarea>
+    </div>
+
+    <sdpi-item label="Steps">
+      <div data-finish-key-rows></div>
+    </sdpi-item>
+    <small class="help">
+      Keys to press once the typing has finished. Click "Record" and press the
+      keys you want, or type in by hand (e.g.
+      <code>meta+shift+enter</code>). Modifier names are <code>control</code>,
+      <code>alt</code>, <code>shift</code> and <code>meta</code> (Command on
+      macOS, Windows key elsewhere).
+    </small>
+    <sdpi-item label="Step delay (ms)">
+      <sdpi-textfield
+        setting="finishKeyDelayMs"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="100"
+        default="100"
+      ></sdpi-textfield>
+    </sdpi-item>
+
+    <div class="section">Instant type</div>
+    <sdpi-item label="Instant type">
+      <sdpi-checkbox
+        setting="instantType"
+        label="Type entire text in one go"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <small class="help">
+      Pastes the whole text via the system clipboard (your previous clipboard
+      contents are restored). Good for large texts.
+    </small>
+
+    <div class="section">Safety</div>
+    <sdpi-item label="Cancel">
+      <sdpi-checkbox
+        data-instant-toggle
+        setting="cancelOnSecondPress"
+        label="Pressing again aborts the current run"
+        default="true"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <small class="help">
+      If unchecked, pressing again will queue another message.
+    </small>
+
+    <div class="section">Timing</div>
+    <sdpi-item label="Character delay (ms)">
+      <sdpi-textfield
+        data-instant-toggle
+        setting="charDelay"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="5"
+        default="5"
+      ></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Word delay (ms)">
+      <sdpi-textfield
+        data-instant-toggle
+        setting="wordDelay"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="40"
+        default="40"
+      ></sdpi-textfield>
+    </sdpi-item>
+    <sdpi-item label="Paragraph delay (ms)">
+      <sdpi-textfield
+        data-instant-toggle
+        setting="paragraphDelay"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="400"
+        default="400"
+      ></sdpi-textfield>
+    </sdpi-item>
+
+    <div class="section">Natural typing</div>
+    <sdpi-item label="Jitter">
+      <sdpi-checkbox
+        data-instant-toggle
+        setting="jitterEnabled"
+        label="Randomize delays"
+        default="true"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <sdpi-item label="Jitter amount (%)">
+      <sdpi-textfield
+        data-instant-toggle
+        setting="jitterPercent"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="100"
+        default="100"
+      ></sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Typos">
+      <sdpi-checkbox
+        data-instant-toggle
+        setting="typosEnabled"
+        label="Occasional adjacent-key typos"
+      ></sdpi-checkbox>
+    </sdpi-item>
+    <sdpi-item label="Typo chance (%)">
+      <sdpi-textfield
+        data-instant-toggle
+        setting="typoChance"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="3"
+      ></sdpi-textfield>
+    </sdpi-item>
+  </body>
+</html>
