@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-02
+
 ### Added
 
 - **Dial pick.** A new action for the dials on Stream Deck +. Rotate to move through the list (wrapping at both ends), press to type the entry shown on the touchscreen, which displays the position and a preview of the selected text. Same line-per-entry format and same typing options as the existing actions. ([#6](https://github.com/ewels/type-deck/issues/6))
@@ -54,7 +56,8 @@ First public release.
 - Template variables expanded at type-time: `{date}`, `{time}`, `{clipboard}` and `{counter}`. Escape literal braces with `{{` and `}}`.
 - Cancel or queue a press while typing is already running.
 
-[unreleased]: https://github.com/ewels/type-deck/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/ewels/type-deck/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ewels/type-deck/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ewels/type-deck/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/ewels/type-deck/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/ewels/type-deck/compare/v0.1.0...v0.2.0
