@@ -1,0 +1,102 @@
+name: E2E
+
+# Packs the plugin the same way release.yml does, unpacks the resulting
+# .streamDeckPlugin and has it type into a real text box. Stream Deck runs on
+# macOS and Windows only, so those are the two runners.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Matches manifest.json "Nodejs.Version", the runtime Stream Deck uses.
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # Keep in step with the same step in release.yml.
+      - name: Stage runtime deps inside the plugin folder
+        run: |
+          set -euo pipefail
+          cat > com.ewels.type-deck.sdPlugin/package.json <<'JSON'
+          {
+            "type": "module",
+            "private": true,
+            "dependencies": {
+              "@nut-tree-fork/libnut": "^4.2.6"
+            }
+          }
+          JSON
+          cd com.ewels.type-deck.sdPlugin
+          npm install --omit=dev --no-package-lock --no-fund --no-audit
+
+      - name: Pack
+        run: npx --no-install streamdeck pack com.ewels.type-deck.sdPlugin --force
+
+      - name: Unpack the .streamDeckPlugin
+        if: runner.os == 'macOS'
+        run: unzip -q com.ewels.type-deck.streamDeckPlugin -d "$RUNNER_TEMP/installed"
+
+      - name: Unpack the .streamDeckPlugin
+        if: runner.os == 'Windows'
+        # It is a zip; Expand-Archive only accepts the .zip extension.
+        shell: pwsh
+        run: |
+          Copy-Item com.ewels.type-deck.streamDeckPlugin "$env:RUNNER_TEMP\plugin.zip"
+          Expand-Archive "$env:RUNNER_TEMP\plugin.zip" "$env:RUNNER_TEMP\installed"
+          Get-ChildItem -Recurse -Depth 3 "$env:RUNNER_TEMP\installed" | Select-Object -ExpandProperty FullName
+
+      - name: Type into a text box
+        env:
+          PLUGIN_DIR: ${{ runner.temp }}/installed/com.ewels.type-deck.sdPlugin
+        run: node test/e2e.mjs
+
+      - name: Screenshot
+        if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        run: screencapture -x "$RUNNER_TEMP/screenshot.png"
+
+      - name: Screenshot
+        if: failure() && runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$env:RUNNER_TEMP\screenshot.png")
+
+      - name: Upload plugin logs and screenshot
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-${{ runner.os }}-debug
+          path: |
+            ${{ runner.temp }}/installed/com.ewels.type-deck.sdPlugin/logs/
+            ${{ runner.temp }}/screenshot.png
+          if-no-files-found: ignore
