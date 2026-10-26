@@ -1,4 +1,4 @@
-# A focused text box for test/e2e-windows.mjs to type into.
+# A focused text box for test/e2e.mjs on Windows to type into.
 #
 # Mirrors the box's contents into $OutFile on every change, and touches
 # $ReadyFile once the window has been shown and focused.
