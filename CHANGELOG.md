@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Non-ASCII text that goes through the clipboard (Instant type, and the clipboard paste used for characters like `é` on Windows) is no longer garbled. On Windows `café` was pasted as `caf├⌐`; on macOS Instant type pasted `naïve` as `na√Øve`. The clipboard contents restored afterwards were affected the same way.
+
 ## [0.4.0] - 2026-10-02
 
 ### Added
