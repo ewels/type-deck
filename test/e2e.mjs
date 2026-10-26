@@ -287,6 +287,15 @@ await typeCase(
   " café ünïcødé €",
 );
 clipboardCase("restores the clipboard after pasting non-ASCII", KEEP);
+// The symbols from issue #1, between ASCII so a paste starts and ends mid-word.
+await typeCase(
+  "types musical symbols (issue #1)",
+  { text: " C♯ D♭ E♮ F" },
+  " C♯ D♭ E♮ F",
+);
+// Outside the BMP: one character, two UTF-16 code units.
+await typeCase("types astral-plane symbols (𝄞 🎵)", { text: " 𝄞 🎵" }, " 𝄞 🎵");
+clipboardCase("restores the clipboard after musical symbols", KEEP);
 await typeCase(
   "instant type pastes the text",
   { text: " instant paste", instantType: true },
