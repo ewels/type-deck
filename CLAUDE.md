@@ -18,6 +18,7 @@ Every action also supports `instantType` (paste-via-clipboard); see [Instant typ
 ```sh
 npm run build         # one-off rollup build → com.ewels.type-deck.sdPlugin/bin/plugin.js
 npm test              # dial action checks (needs a desktop session; run build first)
+node test/e2e-windows.mjs  # real typing into a text box, Windows only (CI: e2e-windows.yml)
 npm run watch         # rebuild on save, then restart the plugin in Stream Deck via @elgato/cli
 npm run lint          # biome lint
 npm run lint:fix      # biome lint --write
@@ -86,6 +87,7 @@ com.ewels.type-deck.sdPlugin/
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 test/dial.mjs           dial checks over a fake Stream Deck websocket (`npm test`)
+test/e2e-windows.mjs    Windows e2e: packed plugin types into test/e2e-target.ps1's text box
 rollup.config.mjs       bundles src/ to bin/plugin.js
                         `@nut-tree-fork/*` packages are marked external —
                         loaded from node_modules at runtime, not bundled
@@ -142,6 +144,13 @@ websocket and asserts on the commands it sends back, which covers the wrap,
 clamping, per-dial isolation and keypad-regression cases without a Stream Deck +.
 It needs a desktop session because libnut loads at startup, so it is not in CI.
 No case in it has any text to type.
+
+`test/e2e-windows.mjs` is the one test that really types. `.github/workflows/e2e-windows.yml`
+packs the plugin exactly as `release.yml` does, unpacks the `.streamDeckPlugin`, opens a WinForms
+text box (`test/e2e-target.ps1`, which mirrors its contents to a file) and presses Type text keys
+over the fake websocket, then compares what landed in the box. GitHub's Windows runners have an
+interactive desktop, so libnut's `SendInput` and the clipboard both work there. On failure the
+job uploads the plugin's `logs/` and a screenshot. Keep its staging step in step with `release.yml`.
 
 ### Instant type
 
