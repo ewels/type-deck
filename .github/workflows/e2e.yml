@@ -1,7 +1,8 @@
-name: E2E (Windows)
+name: E2E
 
 # Packs the plugin the same way release.yml does, unpacks the resulting
-# .streamDeckPlugin and has it type into a real text box on a Windows runner.
+# .streamDeckPlugin and has it type into a real text box. Stream Deck runs on
+# macOS and Windows only, so those are the two runners.
 on:
   push:
     branches: [main]
@@ -13,7 +14,11 @@ permissions:
 
 jobs:
   e2e:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     defaults:
       run:
@@ -53,6 +58,11 @@ jobs:
         run: npx --no-install streamdeck pack com.ewels.type-deck.sdPlugin --force
 
       - name: Unpack the .streamDeckPlugin
+        if: runner.os == 'macOS'
+        run: unzip -q com.ewels.type-deck.streamDeckPlugin -d "$RUNNER_TEMP/installed"
+
+      - name: Unpack the .streamDeckPlugin
+        if: runner.os == 'Windows'
         # It is a zip; Expand-Archive only accepts the .zip extension.
         shell: pwsh
         run: |
@@ -63,10 +73,16 @@ jobs:
       - name: Type into a text box
         env:
           PLUGIN_DIR: ${{ runner.temp }}/installed/com.ewels.type-deck.sdPlugin
-        run: node test/e2e-windows.mjs
+        run: node test/e2e.mjs
 
       - name: Screenshot
-        if: failure()
+        if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        run: screencapture -x "$RUNNER_TEMP/screenshot.png"
+
+      - name: Screenshot
+        if: failure() && runner.os == 'Windows'
+        continue-on-error: true
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -79,7 +95,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-windows-debug
+          name: e2e-${{ runner.os }}-debug
           path: |
             ${{ runner.temp }}/installed/com.ewels.type-deck.sdPlugin/logs/
             ${{ runner.temp }}/screenshot.png

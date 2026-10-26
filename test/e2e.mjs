@@ -1,9 +1,11 @@
 /**
- * End-to-end typing checks on Windows, driven over a fake Stream Deck websocket.
+ * End-to-end typing checks on macOS and Windows, driven over a fake Stream Deck
+ * websocket.
  *
- *     PLUGIN_DIR=path/to/com.ewels.type-deck.sdPlugin node test/e2e-windows.mjs
+ *     PLUGIN_DIR=path/to/com.ewels.type-deck.sdPlugin node test/e2e.mjs
  *
- * Opens a focused text box (test/e2e-target.ps1), spawns the plugin, presses
+ * Opens a focused text box (test/e2e-target.ps1 on Windows, e2e-target.swift on
+ * macOS), spawns the plugin, presses
  * Type text keys at it and asserts on what actually lands in the box. Unlike
  * test/dial.mjs this really types, through libnut and the clipboard, so it
  * exercises the native binding and the packaged node_modules.
@@ -29,6 +31,13 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), "type-deck-e2e-"));
 const OUT = path.join(work, "out.txt");
 const READY = path.join(work, "ready.txt");
 
+const IS_MAC = process.platform === "darwin";
+const IS_WIN = process.platform === "win32";
+if (!IS_MAC && !IS_WIN) {
+  console.error("Stream Deck only runs on macOS and Windows; nothing to test.");
+  process.exit(1);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function waitFor(fn, timeoutMs, what) {
@@ -53,23 +62,34 @@ function boxText() {
 }
 
 // ------------------------------------------------------------- target window
-const target = spawn(
-  "powershell.exe",
-  [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-STA",
-    "-File",
-    path.join(REPO, "test/e2e-target.ps1"),
-    "-OutFile",
-    OUT,
-    "-ReadyFile",
-    READY,
-  ],
-  { stdio: "inherit" },
-);
-await waitFor(() => fs.existsSync(READY), 30000, "the target window");
+let target;
+if (IS_WIN) {
+  target = spawn(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-STA",
+      "-File",
+      path.join(REPO, "test/e2e-target.ps1"),
+      "-OutFile",
+      OUT,
+      "-ReadyFile",
+      READY,
+    ],
+    { stdio: "inherit" },
+  );
+} else {
+  const bin = path.join(work, "e2e-target");
+  execFileSync(
+    "swiftc",
+    ["-O", "-o", bin, path.join(REPO, "test/e2e-target.swift")],
+    { stdio: "inherit" },
+  );
+  target = spawn(bin, [OUT, READY], { stdio: "inherit" });
+}
+await waitFor(() => fs.existsSync(READY), 60000, "the target window");
 await sleep(500);
 
 // -------------------------------------------------------------------- plugin
@@ -80,9 +100,9 @@ const port = await new Promise((r) =>
 
 const info = {
   application: {
-    font: "Segoe UI",
+    font: IS_MAC ? ".AppleSystemUIFont" : "Segoe UI",
     language: "en",
-    platform: "windows",
+    platform: IS_MAC ? "mac" : "windows",
     platformVersion: os.release(),
     version: "7.1.0",
   },
@@ -93,6 +113,21 @@ const info = {
     { id: "dev1", name: "Stream Deck", size: { columns: 5, rows: 3 }, type: 0 },
   ],
 };
+
+/**
+ * Stream Deck is a GUI app started by launchd on macOS, so the plugin it spawns
+ * gets no LANG / LC_* (a CI shell sets them). Strip them to match: pbcopy and
+ * pbpaste pick their text encoding from the locale.
+ */
+function pluginEnv() {
+  const env = { ...process.env };
+  if (IS_MAC) {
+    for (const k of Object.keys(env)) {
+      if (k === "LANG" || k.startsWith("LC_")) delete env[k];
+    }
+  }
+  return env;
+}
 
 console.log(`Plugin: ${PLUGIN_DIR}`);
 const child = spawn(
@@ -108,7 +143,7 @@ const child = spawn(
     "-info",
     JSON.stringify(info),
   ],
-  { cwd: PLUGIN_DIR, stdio: ["ignore", "pipe", "pipe"] },
+  { cwd: PLUGIN_DIR, env: pluginEnv(), stdio: ["ignore", "pipe", "pipe"] },
 );
 child.stdout.on("data", (d) => process.stdout.write(`[plugin] ${d}`));
 child.stderr.on("data", (d) => process.stderr.write(`[plugin] ${d}`));
@@ -188,7 +223,13 @@ async function typeCase(name, settings, expected) {
 const PS_UTF8 =
   "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false";
 
+const UTF8_ENV = { ...process.env, LANG: "en_US.UTF-8" };
+
 function setClipboard(text) {
+  if (IS_MAC) {
+    execFileSync("pbcopy", { input: text, env: UTF8_ENV });
+    return;
+  }
   // Base64 keeps the text clear of both quoting and code pages.
   const b64 = Buffer.from(text, "utf-8").toString("base64");
   execFileSync("powershell.exe", [
@@ -199,6 +240,9 @@ function setClipboard(text) {
 }
 
 function getClipboard() {
+  if (IS_MAC) {
+    return execFileSync("pbpaste", { encoding: "utf-8", env: UTF8_ENV });
+  }
   return execFileSync(
     "powershell.exe",
     ["-NoProfile", "-Command", `${PS_UTF8}; Get-Clipboard -Raw`],
@@ -233,7 +277,7 @@ await typeCase(
 const KEEP = "on the clipboard before ✓";
 setClipboard(KEEP);
 await typeCase(
-  "types non-ASCII through the clipboard (issue #1)",
+  "types non-ASCII (issue #1)",
   { text: " café ünïcødé €" },
   " café ünïcødé €",
 );
@@ -244,6 +288,12 @@ await typeCase(
   " instant paste",
 );
 clipboardCase("restores the clipboard after an instant type", KEEP);
+await typeCase(
+  "instant type pastes non-ASCII",
+  { text: " naïve ✓", instantType: true },
+  " naïve ✓",
+);
+clipboardCase("restores non-ASCII clipboard after an instant type", KEEP);
 await typeCase(
   "finish key presses Enter after typing",
   { text: " finished", finishKeyCombo: "enter" },
