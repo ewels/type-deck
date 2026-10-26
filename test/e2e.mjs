@@ -252,7 +252,12 @@ function getClipboard() {
 
 function clipboardCase(name, expected) {
   try {
-    assert.equal(getClipboard(), expected);
+    const got = getClipboard();
+    if (got !== expected) {
+      throw new Error(
+        `clipboard is ${JSON.stringify(got)}, expected ${JSON.stringify(expected)}`,
+      );
+    }
     results.push(["PASS", name]);
   } catch (err) {
     results.push(["FAIL", `${name}\n      ${err.message.split("\n")[0]}`]);

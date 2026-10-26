@@ -52,6 +52,19 @@ final class Target: NSObject, NSApplicationDelegate, NSTextViewDelegate {
 
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
+
+// AppKit routes Cmd+V through the main menu's key equivalents, so without an
+// Edit > Paste item the plugin's paste would do nothing.
+let mainMenu = NSMenu()
+let editItem = NSMenuItem()
+let editMenu = NSMenu(title: "Edit")
+editMenu.addItem(
+  withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+editItem.submenu = editMenu
+mainMenu.addItem(NSMenuItem())  // the app menu slot
+mainMenu.addItem(editItem)
+app.mainMenu = mainMenu
+
 let target = Target()
 app.delegate = target
 app.run()
