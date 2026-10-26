@@ -22,6 +22,12 @@ const IS_WIN = process.platform === "win32";
 // received mid-typing. Set to 0 here; all timing is managed in user-space.
 libnut.setKeyboardDelay(0);
 
+// Windows PowerShell reads stdin and writes stdout in the console's OEM code
+// page (437 on a US install), so UTF-8 text through the pipe came out as
+// mojibake ("café" pasted as "caf├⌐"). Switch both ends to BOM-less UTF-8.
+const PS_UTF8 =
+  "$utf8 = New-Object System.Text.UTF8Encoding $false; [Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8";
+
 async function readClipboard(): Promise<string> {
   try {
     if (IS_MAC) {
@@ -32,7 +38,7 @@ async function readClipboard(): Promise<string> {
       // windowsHide prevents a console flash every time {clipboard} expands.
       const { stdout } = await execFileP(
         "powershell.exe",
-        ["-NoProfile", "-Command", "Get-Clipboard"],
+        ["-NoProfile", "-Command", `${PS_UTF8}; Get-Clipboard`],
         { windowsHide: true },
       );
       return stdout.replace(/\r?\n$/, "");
@@ -56,7 +62,7 @@ function writeClipboard(text: string): Promise<boolean> {
       args = [
         "-NoProfile",
         "-Command",
-        "[Console]::In.ReadToEnd() | Set-Clipboard",
+        `${PS_UTF8}; [Console]::In.ReadToEnd() | Set-Clipboard`,
       ];
       opts = { windowsHide: true };
     } else {

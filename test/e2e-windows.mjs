@@ -12,7 +12,7 @@
  * .streamDeckPlugin so the release artifact itself is what gets tested.
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -154,6 +154,8 @@ async function press(settings) {
   return context;
 }
 
+const RUN_TAIL_MS = 2000;
+
 const results = [];
 async function typeCase(name, settings, expected) {
   const before = boxText();
@@ -165,12 +167,48 @@ async function typeCase(name, settings, expected) {
       await waitFor(() => boxText() === want, 10000, "the typed text");
     } catch {
       // Report what did arrive rather than just "timed out".
-      assert.equal(boxText().slice(before.length), expected);
+      const got = JSON.stringify(boxText().slice(before.length));
+      throw new Error(`typed ${got}, expected ${JSON.stringify(expected)}`);
     }
+    // The text lands before the run ends (the clipboard restore and finish
+    // keys come after it). A press before then would cancel the run instead.
+    await sleep(RUN_TAIL_MS);
     const alert = received
       .slice(mark)
       .find((m) => m.event === "showAlert" && m.context === context);
     assert.equal(alert, undefined, "plugin showed an alert");
+    results.push(["PASS", name]);
+  } catch (err) {
+    results.push(["FAIL", `${name}\n      ${err.message.split("\n")[0]}`]);
+  }
+}
+
+// The clipboard is read and written here independently of the plugin's own
+// helpers, with explicit UTF-8 so the check cannot share their encoding bug.
+const PS_UTF8 =
+  "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false";
+
+function setClipboard(text) {
+  // Base64 keeps the text clear of both quoting and code pages.
+  const b64 = Buffer.from(text, "utf-8").toString("base64");
+  execFileSync("powershell.exe", [
+    "-NoProfile",
+    "-Command",
+    `Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64}')))`,
+  ]);
+}
+
+function getClipboard() {
+  return execFileSync(
+    "powershell.exe",
+    ["-NoProfile", "-Command", `${PS_UTF8}; Get-Clipboard -Raw`],
+    { encoding: "utf-8" },
+  ).replace(/\r?\n$/, "");
+}
+
+function clipboardCase(name, expected) {
+  try {
+    assert.equal(getClipboard(), expected);
     results.push(["PASS", name]);
   } catch (err) {
     results.push(["FAIL", `${name}\n      ${err.message.split("\n")[0]}`]);
@@ -192,16 +230,20 @@ await typeCase(
   { text: ' !@#$%^&*()_+{}:"<>?' },
   ' !@#$%^&*()_+{}:"<>?',
 );
+const KEEP = "on the clipboard before ✓";
+setClipboard(KEEP);
 await typeCase(
   "types non-ASCII through the clipboard (issue #1)",
   { text: " café ünïcødé €" },
   " café ünïcødé €",
 );
+clipboardCase("restores the clipboard after pasting non-ASCII", KEEP);
 await typeCase(
   "instant type pastes the text",
   { text: " instant paste", instantType: true },
   " instant paste",
 );
+clipboardCase("restores the clipboard after an instant type", KEEP);
 await typeCase(
   "finish key presses Enter after typing",
   { text: " finished", finishKeyCombo: "enter" },
