@@ -22,17 +22,32 @@ const IS_WIN = process.platform === "win32";
 // received mid-typing. Set to 0 here; all timing is managed in user-space.
 libnut.setKeyboardDelay(0);
 
+// Windows PowerShell reads stdin and writes stdout in the console's OEM code
+// page (437 on a US install), so UTF-8 text through the pipe came out as
+// mojibake ("café" pasted as "caf├⌐"). Switch both ends to BOM-less UTF-8.
+const PS_UTF8 =
+  "$utf8 = New-Object System.Text.UTF8Encoding $false; [Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8";
+
+// pbcopy and pbpaste pick their text encoding from the locale, and Stream Deck
+// (a launchd GUI app) starts the plugin with none, so anything outside ASCII
+// was mangled ("naïve" pasted as "na√Øve"). Pin them to UTF-8.
+const MAC_UTF8_ENV = {
+  ...process.env,
+  LANG: "en_US.UTF-8",
+  LC_ALL: "en_US.UTF-8",
+};
+
 async function readClipboard(): Promise<string> {
   try {
     if (IS_MAC) {
-      const { stdout } = await execFileP("pbpaste", []);
+      const { stdout } = await execFileP("pbpaste", [], { env: MAC_UTF8_ENV });
       return stdout;
     }
     if (IS_WIN) {
       // windowsHide prevents a console flash every time {clipboard} expands.
       const { stdout } = await execFileP(
         "powershell.exe",
-        ["-NoProfile", "-Command", "Get-Clipboard"],
+        ["-NoProfile", "-Command", `${PS_UTF8}; Get-Clipboard`],
         { windowsHide: true },
       );
       return stdout.replace(/\r?\n$/, "");
@@ -47,16 +62,17 @@ function writeClipboard(text: string): Promise<boolean> {
   return new Promise((resolve) => {
     let cmd: string;
     let args: string[] = [];
-    let opts: { windowsHide?: boolean } = {};
+    let opts: { windowsHide?: boolean; env?: NodeJS.ProcessEnv } = {};
     if (IS_MAC) {
       cmd = "pbcopy";
+      opts = { env: MAC_UTF8_ENV };
     } else if (IS_WIN) {
       cmd = "powershell.exe";
       // [Console]::In.ReadToEnd() reads stdin as one blob, preserving newlines.
       args = [
         "-NoProfile",
         "-Command",
-        "[Console]::In.ReadToEnd() | Set-Clipboard",
+        `${PS_UTF8}; [Console]::In.ReadToEnd() | Set-Clipboard`,
       ];
       opts = { windowsHide: true };
     } else {

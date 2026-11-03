@@ -18,6 +18,7 @@ Every action also supports `instantType` (paste-via-clipboard); see [Instant typ
 ```sh
 npm run build         # one-off rollup build → com.ewels.type-deck.sdPlugin/bin/plugin.js
 npm test              # dial action checks (needs a desktop session; run build first)
+node test/e2e.mjs     # real typing into a text box, macOS / Windows (CI: e2e.yml)
 npm run watch         # rebuild on save, then restart the plugin in Stream Deck via @elgato/cli
 npm run lint          # biome lint
 npm run lint:fix      # biome lint --write
@@ -86,6 +87,7 @@ com.ewels.type-deck.sdPlugin/
   bin/plugin.js         rollup output, gitignored
   imgs/, logs/          icons and runtime logs (logs gitignored)
 test/dial.mjs           dial checks over a fake Stream Deck websocket (`npm test`)
+test/e2e.mjs            e2e: packed plugin types into a real text box (e2e-target.{ps1,swift})
 rollup.config.mjs       bundles src/ to bin/plugin.js
                         `@nut-tree-fork/*` packages are marked external —
                         loaded from node_modules at runtime, not bundled
@@ -142,6 +144,15 @@ websocket and asserts on the commands it sends back, which covers the wrap,
 clamping, per-dial isolation and keypad-regression cases without a Stream Deck +.
 It needs a desktop session because libnut loads at startup, so it is not in CI.
 No case in it has any text to type.
+
+`test/e2e.mjs` is the one test that really types. `.github/workflows/e2e.yml` runs it on
+`windows-latest` and `macos-latest` (Stream Deck has no Linux build): it packs the plugin exactly
+as `release.yml` does, unpacks the `.streamDeckPlugin`, opens a text box that mirrors its contents
+to a file (`test/e2e-target.ps1`, WinForms; `test/e2e-target.swift`, AppKit, compiled with
+`swiftc` at test time) and presses Type text keys over the fake websocket, then compares what
+landed in the box and checks the clipboard was restored. On macOS the plugin is spawned without
+`LANG` / `LC_*`, as Stream Deck (a launchd GUI app) would spawn it. On failure the
+job uploads the plugin's `logs/` and a screenshot. Keep its staging step in step with `release.yml`.
 
 ### Instant type
 
